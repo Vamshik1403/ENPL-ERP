@@ -1,0 +1,700 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AddressBook {
+  id            Int     @id @default(autoincrement())
+  addressType   String?
+  addressBookID String
+  customerName  String
+  regdAddress   String
+  city          String?
+  state         String?
+  pinCode       String?
+  gstNo         String?
+
+  contacts               AddressBookContact[]
+  supportTickets         SupportTicket[]
+  supportTicketMappings  SupportTicketMapping[]
+  sites                  Site[]
+  tasks                  Task[]
+  customerContactSites   CustomerContactSite[]
+  complaintRegistrations ComplaintRegistration[]
+  materialDelivery       MaterialDelivery[]
+}
+
+model AddressBookContact {
+  id            Int    @id @default(autoincrement())
+  addressBookId Int
+  contactPerson String
+  designation   String
+  contactNumber String
+  emailAddress  String
+
+  addressBook AddressBook @relation(fields: [addressBookId], references: [id], onDelete: Cascade)
+}
+
+model Site {
+  id                     Int                     @id @default(autoincrement())
+  addressBookId          Int
+  siteID                 String                  @default(uuid())
+  siteName               String
+  siteAddress            String
+  city                   String?
+  state                  String?
+  pinCode                String?
+  gstNo                  String?
+  supportTicketMappings  SupportTicketMapping[]
+  addressBook            AddressBook             @relation(fields: [addressBookId], references: [id], onDelete: Cascade)
+  contacts               SiteContact[]
+  supportTickets         SupportTicket[]
+  tasks                  Task[]
+  customerContactSites   CustomerContactSite[]
+  complaintRegistrations ComplaintRegistration[]
+  materialDelivery       MaterialDelivery[]
+}
+
+model SiteContact {
+  id            Int    @id @default(autoincrement())
+  siteId        Int
+  contactPerson String
+  designation   String
+  contactNumber String
+  emailAddress  String
+  site          Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+}
+
+model ProductType {
+  id                        Int                        @id @default(autoincrement())
+  productTypeName           String
+  serviceContractsInventory ServiceContractInventory[]
+  taskInventories           TaskInventory[]
+}
+
+model ServiceWorkCategory {
+  id                      Int    @id @default(autoincrement())
+  serviceWorkCategoryName String
+}
+
+model ContractWorkCategory {
+  id                       Int                       @id @default(autoincrement())
+  contractWorkCategoryName String
+  serviceContractServices  ServiceContractServices[]
+}
+
+model WorkscopeCategory {
+  id                    Int                      @id @default(autoincrement())
+  workscopeCategoryName String
+  taskWorkscopeCategory TasksWorkscopeCategory[]
+  tasksWorkscopeDetails TasksWorkscopeDetails[]
+}
+
+model ServiceContract {
+  id                Int     @id @default(autoincrement())
+  serviceContractID String
+  customerId        Int
+  branchId          Int
+  salesManagerName  String
+  amcType           String?
+
+  attachmentUrl      String? // file location
+  attachmentName     String? // original file name
+  attachmentMimeType String? // "application/pdf", "image/png"
+  attachmentSize     Int? // bytes
+
+  serviceContractType ServiceContractType[]
+  periods             ServiceContractPeriod[]
+  terms               ServiceContractTerms[]
+  services            ServiceContractServices[]
+  inventories         ServiceContractInventory[]
+  histories           ServiceContractHistory[]
+}
+
+model ServiceContractType {
+  id                      Int                      @id @default(autoincrement())
+  serviceContractType     String
+  serviceContractId       Int
+  billingType             String?
+  billingCycle            String?
+  billingDueDate          String?
+  paymentStatus           String?
+  serviceContractBillings ServiceContractBilling[]
+  serviceContract         ServiceContract          @relation(fields: [serviceContractId], references: [id], onDelete: Cascade)
+}
+
+model ServiceContractBilling {
+  id                    Int    @id @default(autoincrement())
+  serviceContractTypeId Int
+  dueDate               String
+  paymentStatus         String
+  overdueDays           Int    @default(0)
+
+  serviceContractType ServiceContractType @relation(fields: [serviceContractTypeId], references: [id], onDelete: Cascade)
+}
+
+model ServiceContractPeriod {
+  id                  Int             @id @default(autoincrement())
+  serviceContractId   Int
+  startDate           String
+  endDate             String
+  nextPMVisitDate     String?
+  contractDescription String?
+  serviceContract     ServiceContract @relation(fields: [serviceContractId], references: [id], onDelete: Cascade)
+}
+
+model ServiceContractTerms {
+  id                            Int             @id @default(autoincrement())
+  serviceContractId             Int
+  maxOnSiteVisits               String
+  maxPreventiveMaintenanceVisit String
+  inclusiveInOnSiteVisitCounts  Boolean
+  preventiveMaintenanceCycle    String
+  serviceContract               ServiceContract @relation(fields: [serviceContractId], references: [id], onDelete: Cascade)
+}
+
+model ServiceContractServices {
+  id                     Int                  @id @default(autoincrement())
+  serviceContractId      Int
+  contractWorkCategoryId Int
+  description            String? // Add this line
+  serviceContract        ServiceContract      @relation(fields: [serviceContractId], references: [id], onDelete: Cascade)
+  contractWorkCategory   ContractWorkCategory @relation(fields: [contractWorkCategoryId], references: [id], onDelete: Cascade)
+}
+
+model ServiceContractInventory {
+  id                 Int             @id @default(autoincrement())
+  serviceContractId  Int
+  productTypeId      Int
+  makeModel          String
+  snMac              String
+  description        String
+  purchaseDate       DateTime
+  warrantyPeriod     String
+  warrantyStatus     String // Active / Expired (computed in app)
+  thirdPartyPurchase Boolean
+  serviceContract    ServiceContract @relation(fields: [serviceContractId], references: [id], onDelete: Cascade)
+  productType        ProductType     @relation(fields: [productTypeId], references: [id], onDelete: Cascade)
+}
+
+model ServiceContractHistory {
+  id                Int             @id @default(autoincrement())
+  serviceContractId Int
+  taskId            String
+  serviceType       String // On-Site Visit / PM Visit / Remote Support
+  serviceDate       DateTime
+  startTime         String
+  endTime           String
+  serviceDetails    String
+  serviceContract   ServiceContract @relation(fields: [serviceContractId], references: [id], onDelete: Cascade)
+}
+
+model Department {
+  id             Int    @id @default(autoincrement())
+  departmentName String
+
+  emails                 DepartmentEmail[] // 👈 multiple emails
+  tasks                  Task[]
+  complaintRegistrations ComplaintRegistration[]
+}
+
+model DepartmentEmail {
+  id           Int    @id @default(autoincrement())
+  email        String
+  departmentId Int
+
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([email, departmentId]) // prevents duplicate email in same department
+}
+
+enum TaskType {
+  SERVICE
+  PRODUCT_INQUIRY
+  PURCHASE_ORDER
+}
+
+enum PurchaseType {
+  INQUIRY
+  ORDER
+}
+
+model Task {
+  id            Int           @id @default(autoincrement())
+  taskID        String        @unique
+  departmentId  Int
+  addressBookId Int?
+  siteId        Int?
+  status        String        @default("Open")
+  title         String?
+  description   String?
+  attachment    String?
+  priority      String?
+  userId        Int?
+  engineerId    Int?
+  engineerTaskId String?
+  createdBy     String
+  createdAt     DateTime      @default(now())
+  taskType      TaskType      @default(SERVICE) // 🔥 NEW
+  purchase      TaskPurchase? // 🔥 NEW (1–1)
+
+  department  Department   @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  addressBook AddressBook? @relation(fields: [addressBookId], references: [id], onDelete: Cascade)
+  site        Site?        @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user        User?        @relation(fields: [userId], references: [id])
+  engineer    Engineer?    @relation(fields: [engineerId], references: [id])
+
+  contacts         TasksContacts[]
+  workscopeCat     TasksWorkscopeCategory[]
+  workscopeDetails TasksWorkscopeDetails[]
+  schedule         TasksSchedule[]
+  remarks          TasksRemarks[]
+  images           TaskImage[]
+  taskInventories  TaskInventory[]
+}
+
+model TaskPurchase {
+  id     Int @id @default(autoincrement())
+  taskId Int @unique
+
+  customerName String?
+  address      String?
+
+  createdAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  products                TaskPurchaseProduct[]
+  taskPurchaseAttachments TaskPurchaseAttachment[]
+  purchaseType            PurchaseType
+}
+
+model TaskPurchaseProduct {
+  id             Int @id @default(autoincrement())
+  taskPurchaseId Int
+
+  make        String?
+  model       String?
+  description String?
+
+  warranty String?
+  rate     Decimal? @db.Decimal(10, 2)
+  vendor   String?
+
+  validity     DateTime? // 🔥 Inquiry only
+  availability String? // 🔥 Inquiry only
+
+  createdAt DateTime @default(now())
+
+  taskPurchase TaskPurchase @relation(fields: [taskPurchaseId], references: [id], onDelete: Cascade)
+}
+
+model TaskPurchaseAttachment {
+  id             Int          @id @default(autoincrement())
+  taskPurchaseId Int
+  filename       String
+  filepath       String
+  mimeType       String
+  fileSize       Int
+  uploadedAt     DateTime     @default(now())
+  taskPurchase   TaskPurchase @relation(fields: [taskPurchaseId], references: [id], onDelete: Cascade)
+}
+
+model TaskInventory {
+  id                 Int         @id @default(autoincrement())
+  taskId             Int
+  serviceContractId  Int
+  productTypeId      Int
+  makeModel          String?
+  snMac              String?
+  description        String?
+  purchaseDate       DateTime?
+  warrantyPeriod     String?
+  warrantyStatus     String? // Active / Expired (computed in app)
+  thirdPartyPurchase Boolean?
+  task               Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  productType        ProductType @relation(fields: [productTypeId], references: [id], onDelete: Cascade)
+}
+
+model TaskImage {
+  id         Int      @id @default(autoincrement())
+  taskId     Int
+  filename   String
+  filepath   String
+  mimeType   String
+  fileSize   Int
+  uploadedAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+model TasksContacts {
+  id            Int    @id @default(autoincrement())
+  taskId        Int
+  contactName   String
+  contactNumber String
+  contactEmail  String
+  task          Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+model TasksWorkscopeCategory {
+  id                  Int               @id @default(autoincrement())
+  taskId              Int
+  workscopeCategoryId Int
+  task                Task              @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  workscopeCategory   WorkscopeCategory @relation(fields: [workscopeCategoryId], references: [id], onDelete: Cascade)
+}
+
+model TasksWorkscopeDetails {
+  id                  Int               @id @default(autoincrement())
+  taskId              Int
+  workscopeCategoryId Int
+  workscopeDetails    String
+  extraNote           String?
+  task                Task              @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  workscopeCategory   WorkscopeCategory @relation(fields: [workscopeCategoryId], references: [id], onDelete: Cascade)
+}
+
+model TasksSchedule {
+  id               Int      @id @default(autoincrement())
+  taskId           Int
+  proposedDateTime DateTime
+  priority         String // High / Medium / Low
+  task             Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+model TasksRemarks {
+  id        Int      @id @default(autoincrement())
+  taskId    Int
+  remark    String
+  status    String   @default("Open")
+  createdBy String
+  createdAt DateTime @default(now())
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+model SupportTicketUser {
+  id                    Int                    @id @default(autoincrement())
+  name                  String
+  email                 String
+  designation           String?
+  contactNumber         String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  supportTicketMappings SupportTicketMapping[]
+}
+
+model SupportTicketMapping {
+  id                  Int               @id @default(autoincrement())
+  customerId          Int
+  siteId              Int
+  supportTicketUserId Int
+  addressBook         AddressBook       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  site                Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  supportTicketUser   SupportTicketUser @relation(fields: [supportTicketUserId], references: [id], onDelete: Cascade)
+}
+
+model SupportTicket {
+  id            Int         @id @default(autoincrement())
+  ticketID      String      @unique
+  name          String
+  email         String
+  designation   String?
+  customerId    Int
+  siteId        Int
+  description   String?
+  supportType   String
+  prority       String?
+  contactPerson String?
+  contactNumber String?
+  status        String      @default("Open")
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  site          Site        @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  addressBook   AddressBook @relation(fields: [customerId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id             Int             @id @default(autoincrement())
+  username       String          @unique
+  password       String
+  email          String?         @unique
+  fullName       String?
+  userType       String?
+  department     String?
+  createdAt      DateTime        @default(now())
+  userPermission UserPermission?
+  tasks          Task[]
+}
+
+model CustomerContact {
+  id            Int      @id @default(autoincrement())
+  custFirstName String
+  custLastName  String
+  phoneNumber   String
+  emailAddress  String   @unique
+  createdAt     DateTime @default(now())
+
+  sites CustomerContactSite[]
+}
+
+model CustomerContactSite {
+  id                Int @id @default(autoincrement())
+  customerContactId Int
+  customerId        Int
+  siteId            Int
+
+  customerContact CustomerContact @relation(fields: [customerContactId], references: [id], onDelete: Cascade)
+  addressBook     AddressBook     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  site            Site            @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([customerContactId, customerId, siteId])
+}
+
+model ComplaintRegistration {
+  id           Int         @id @default(autoincrement())
+  complaintID  String      @unique
+  customerId   Int
+  siteId       Int
+  departmentId Int
+  title        String
+  description  String
+  status       String      @default("Open")
+  createdAt    DateTime    @default(now())
+  site         Site        @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  addressBook  AddressBook @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  department   Department  @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+}
+
+model UserPermission {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @unique
+  permissions Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Category {
+  id            Int           @id @default(autoincrement())
+  categoryName  String
+  categoryId    String?
+  subCategories SubCategory[] @relation("CategoryToSubCategory")
+  products      Product[]
+}
+
+model SubCategory {
+  id              Int       @id @default(autoincrement())
+  subCategoryName String
+  subCategoryId   String
+  categoryId      Int
+  category        Category  @relation(name: "CategoryToSubCategory", fields: [categoryId], references: [id], onDelete: Cascade)
+  products        Product[]
+}
+
+model Product {
+  id                 Int    @id @default(autoincrement())
+  productId          String @unique
+  productName        String
+  productDescription String
+  HSN                String
+  unit               String
+  gstRate            String
+  categoryId         Int
+  subCategoryId      Int
+
+  category             Category               @relation(fields: [categoryId], references: [id])
+  subCategory          SubCategory            @relation(fields: [subCategoryId], references: [id])
+  productInventories   ProductInventory[]
+  materialDeliveryItem MaterialDeliveryItem[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? @updatedAt
+}
+
+model Inventory {
+  id                 Int      @id @default(autoincrement())
+  vendorId           Int
+  purchaseDate       DateTime
+  purchaseInvoice    String   @unique
+  creditTerms        String
+  dueDate            String
+  invoiceNetAmount   String
+  gstAmount          String
+  dueAmount          Float?
+  invoiceGrossAmount String
+  status             String?
+
+  vendor               Vendor                 @relation(fields: [vendorId], references: [id])
+  products             ProductInventory[]
+  materialDeliveryItem MaterialDeliveryItem[]
+  vendorPayment        VendorPayment[]
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+}
+
+model ProductInventory {
+  id             Int     @id @default(autoincrement())
+  inventoryId    Int
+  productId      Int
+  make           String
+  model          String?
+  serialNumber   String?
+  macAddress     String?
+  warrantyPeriod String
+  purchaseRate   String
+
+  inventory Inventory @relation(fields: [inventoryId], references: [id])
+  product   Product   @relation(fields: [productId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MaterialDelivery {
+  id                Int     @id @default(autoincrement())
+  deliveryType      String
+  deliveryChallan   String?
+  refNumber         String?
+  salesOrderNo      String?
+  quotationNo       String?
+  purchaseInvoiceNo String?
+  siteId            Int?
+  customerId        Int?
+  vendorId          Int?
+
+  addressBook AddressBook? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  vendor      Vendor?      @relation(fields: [vendorId], references: [id])
+
+  site Site? @relation(fields: [siteId], references: [id])
+
+  materialDeliveryItems MaterialDeliveryItem[] @relation("MaterialDeliveryToMaterialDeliveryItem") // ✅ ADD NAME
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MaterialDeliveryItem {
+  id                 Int  @id @default(autoincrement())
+  materialDeliveryId Int
+  inventoryId        Int?
+  productId          Int
+
+  serialNumber String
+  macAddress   String
+
+  materialDelivery MaterialDelivery @relation(name: "MaterialDeliveryToMaterialDeliveryItem", fields: [materialDeliveryId], references: [id])
+  inventory        Inventory?       @relation(fields: [inventoryId], references: [id])
+  product          Product          @relation(fields: [productId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model VendorPayment {
+  id Int @id @default(autoincrement())
+
+  vendorId    Int
+  inventoryId Int?
+
+  purchaseInvoiceNo  String
+  invoiceGrossAmount String
+  dueAmount          String
+  paidAmount         String
+  balanceDue         String?
+  paymentDate        DateTime
+  paymentType        String
+  referenceNo        String
+  remark             String?
+
+  vendor    Vendor     @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  inventory Inventory? @relation(fields: [inventoryId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Define the Vendor model
+model Vendor {
+  id              Int      @id @default(autoincrement())
+  vendorCode      String?  @unique
+  vendorName      String
+  registerAddress String
+  gstNo           String   @unique
+  emailId         String   @unique
+  businessType    String?
+  state           String?
+  city            String?
+  website         String?
+  products        Json?
+  creditTerms     String
+  creditLimit     String
+  remark          String
+  gstpdf          String?
+  hodId           Int?
+  managerId       Int?
+  executiveId     Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  contacts         VendorContact[]    @relation("VendorContacts")
+  bankDetails      BankDetail[]       @relation("VendorBankDetails")
+  inventory        Inventory[]
+  materialDelivery MaterialDelivery[]
+  vendorPayment    VendorPayment[]
+}
+
+model BankDetail {
+  id            Int    @id @default(autoincrement())
+  bankName      String
+  accountNumber String
+  ifscCode      String
+  branchName    String
+  vendorId      Int
+  vendor        Vendor @relation("VendorBankDetails", fields: [vendorId], references: [id], onDelete: Cascade)
+}
+
+model VendorContact {
+  id                 Int     @id @default(autoincrement())
+  title              String
+  firstName          String
+  lastName           String
+  contactPhoneNumber String
+  contactEmailId     String
+  designation        String
+  department         String
+  landlineNumber     String?
+  vendorId           Int
+  vendor             Vendor  @relation("VendorContacts", fields: [vendorId], references: [id], onDelete: Cascade)
+}
+
+model BackupConfig {
+  id         Int      @id @default(1)
+  enabled    Boolean  @default(false)
+  type       String // HOUR, DAY, WEEK, MONTH, YEAR
+  hour       Int?
+  minute     Int?
+  dayOfWeek  Int? // 0-6
+  dayOfMonth Int?
+  month      Int?
+  maxFiles   Int      @default(5)
+  updatedAt  DateTime @updatedAt
+}
+
+model Engineer {
+  id          Int      @id @default(autoincrement())
+  engineerId  String   @unique
+  firstName   String
+  lastName    String
+  email       String   @unique
+  phoneNumber String
+  telegramChatId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tasks       Task[]
+}

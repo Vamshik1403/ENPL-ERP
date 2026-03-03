@@ -1,0 +1,6 @@
+-- AlterTable
+ALTER TABLE "AddressBook" ALTER COLUMN "addressType" DROP NOT NULL,
+ALTER COLUMN "gstNo" DROP NOT NULL;
+
+-- AlterTable
+ALTER TABLE "Site" ALTER COLUMN "gstNo" DROP NOT NULL;
