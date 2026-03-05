@@ -37,41 +37,39 @@ export class EngineerService {
     });
   }
 
-  async findAll() {
-    return this.prisma.engineer.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: {
-        tasks: {
-          select: {
-            id: true,
-            taskID: true,
-            engineerTaskId: true,
-            title: true,
-            status: true,
-          },
-        },
-      },
-    });
-  }
+ // engineer.service.ts
+async findAll() {
+  return this.prisma.engineer.findMany({
+    include: {
+      // REMOVED: tasks: { ... } - this doesn't exist anymore
+      // Instead, you can include taskAssignments if needed
+      taskAssignments: {
+        include: {
+          task: true
+        }
+      }
+    }
+  });
+}
 
-  async findOne(id: number) {
-    const engineer = await this.prisma.engineer.findUnique({
-      where: { id },
-      include: {
-        tasks: {
-          select: {
-            id: true,
-            taskID: true,
-            engineerTaskId: true,
-            title: true,
-            status: true,
-          },
-        },
-      },
-    });
-    if (!engineer) throw new NotFoundException(`Engineer #${id} not found`);
-    return engineer;
+async findOne(id: number) {
+  const engineer = await this.prisma.engineer.findUnique({
+    where: { id },
+    include: {
+      taskAssignments: {
+        include: {
+          task: true
+        }
+      }
+    }
+  });
+  
+  if (!engineer) {
+    throw new NotFoundException(`Engineer #${id} not found`);
   }
+  
+  return engineer;
+}
 
   async update(id: number, dto: UpdateEngineerDto) {
     await this.findOne(id);

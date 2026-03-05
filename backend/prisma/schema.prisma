@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  //url      = env("DATABASE_URL")
 }
 
 model AddressBook {
@@ -235,18 +235,18 @@ model Task {
   attachment    String?
   priority      String?
   userId        Int?
-  engineerId    Int?
   engineerTaskId String?
   createdBy     String
   createdAt     DateTime      @default(now())
-  taskType      TaskType      @default(SERVICE) // 🔥 NEW
-  purchase      TaskPurchase? // 🔥 NEW (1–1)
+  taskType      TaskType      @default(SERVICE)
+  purchase      TaskPurchase?
 
   department  Department   @relation(fields: [departmentId], references: [id], onDelete: Cascade)
   addressBook AddressBook? @relation(fields: [addressBookId], references: [id], onDelete: Cascade)
   site        Site?        @relation(fields: [siteId], references: [id], onDelete: Cascade)
   user        User?        @relation(fields: [userId], references: [id])
-  engineer    Engineer?    @relation(fields: [engineerId], references: [id])
+
+  engineerAssignments TaskEngineerAssignment[]
 
   contacts         TasksContacts[]
   workscopeCat     TasksWorkscopeCategory[]
@@ -255,6 +255,44 @@ model Task {
   remarks          TasksRemarks[]
   images           TaskImage[]
   taskInventories  TaskInventory[]
+}
+
+
+model Engineer {
+  id          Int      @id @default(autoincrement())
+  engineerId  String   @unique
+  firstName   String
+  lastName    String
+  email       String   @unique
+  phoneNumber String
+  telegramChatId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // This connects to the junction table
+  taskAssignments TaskEngineerAssignment[]
+}
+
+// ✅ JUNCTION TABLE - Add this
+model TaskEngineerAssignment {
+  id            Int      @id @default(autoincrement())
+  taskId        Int
+  engineerId    Int
+  assignedDate  DateTime @default(now())
+  proposedDateTime DateTime? // When engineer is expected to work
+  priority      String?  // High, Medium, Low, Urgent
+  status        String   @default("Assigned") // Assigned, Accepted, Rejected, Completed, In Progress
+  notes         String?  // Additional notes for this specific engineer
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  engineer  Engineer  @relation(fields: [engineerId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, engineerId]) // Prevent duplicate assignments
+  @@index([taskId])
+  @@index([engineerId])
 }
 
 model TaskPurchase {
@@ -327,7 +365,9 @@ model TaskImage {
   filepath   String
   mimeType   String
   fileSize   Int
-  uploadedAt DateTime @default(now())
+  uploadedBy String?
+  uploadedByName String?
+   uploadedAt DateTime @default(now())
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
 }
@@ -686,15 +726,4 @@ model BackupConfig {
   updatedAt  DateTime @updatedAt
 }
 
-model Engineer {
-  id          Int      @id @default(autoincrement())
-  engineerId  String   @unique
-  firstName   String
-  lastName    String
-  email       String   @unique
-  phoneNumber String
-  telegramChatId String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  tasks       Task[]
-}
+

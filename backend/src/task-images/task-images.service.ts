@@ -15,7 +15,12 @@ export class TaskImagesService {
     }
   }
 
-  async uploadImages(taskId: number, files: Array<Express.Multer.File>) {
+  async uploadImages(
+    taskId: number, 
+    files: Array<Express.Multer.File>,
+    uploadedBy?: string,
+    uploadedByName?: string
+  ) {
     // Check if task exists
     const task = await this.prisma.task.findUnique({
       where: { id: taskId }
@@ -38,7 +43,7 @@ export class TaskImagesService {
       // Save file to disk
       fs.writeFileSync(filePath, file.buffer);
 
-      // Save to database
+      // Save to database with uploader info
       const taskImage = await this.prisma.taskImage.create({
         data: {
           taskId,
@@ -46,6 +51,8 @@ export class TaskImagesService {
           filepath: filePath,
           mimeType: file.mimetype,
           fileSize: file.size,
+          uploadedBy: uploadedBy || null,
+          uploadedByName: uploadedByName || null,
           uploadedAt: new Date()
         }
       });

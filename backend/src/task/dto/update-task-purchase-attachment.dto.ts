@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsNotEmpty } from 'class-validator';
+import { IsString, IsNumber, IsNotEmpty, IsOptional } from 'class-validator';
 
 export class UpdateTaskPurchaseAttachmentDto {
   @IsString()
@@ -16,4 +16,7 @@ export class UpdateTaskPurchaseAttachmentDto {
   @IsNumber()
   @IsNotEmpty()
   fileSize: number;
+
+  @IsOptional()
+  uploadedBy?: string;
 }

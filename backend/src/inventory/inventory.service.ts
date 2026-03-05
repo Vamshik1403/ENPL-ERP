@@ -117,8 +117,13 @@ macAddress: product.macAddress ?? null,
 
   // Ensure that the inventory update logic is correctly updating the fields
  async update(id: number, data: UpdateInventoryDto) {
-  const inventory = await this.prisma.inventory.findUnique({ where: { id } });
-  if (!inventory) throw new NotFoundException('Inventory not found');
+  const inventory = await this.prisma.inventory.findUnique({
+    where: { id },
+  });
+
+  if (!inventory) {
+    throw new NotFoundException('Inventory not found');
+  }
 
   const {
     vendorId,
@@ -137,31 +142,66 @@ macAddress: product.macAddress ?? null,
     updatedAt: new Date(),
   };
 
-  if (purchaseDate) updatedInventoryData.purchaseDate = new Date(purchaseDate);
-  if (purchaseInvoice) updatedInventoryData.purchaseInvoice = purchaseInvoice;
+  // ✅ Purchase date
+  if (purchaseDate) {
+    updatedInventoryData.purchaseDate = new Date(purchaseDate);
+  }
+
+  // ✅ Purchase invoice — SAFE UNIQUE HANDLING
+  if (
+    purchaseInvoice &&
+    purchaseInvoice !== inventory.purchaseInvoice
+  ) {
+    const existing = await this.prisma.inventory.findFirst({
+      where: {
+        purchaseInvoice,
+        id: { not: id }, // exclude current record
+      },
+    });
+
+    if (existing) {
+      throw new Error('Purchase invoice already exists');
+    }
+
+    updatedInventoryData.purchaseInvoice = purchaseInvoice;
+  }
+
+  // ✅ Other simple fields
   if (creditTerms) updatedInventoryData.creditTerms = creditTerms;
   if (dueDate) updatedInventoryData.dueDate = dueDate;
 
-  if (invoiceNetAmount !== undefined)
+  if (invoiceNetAmount !== undefined) {
     updatedInventoryData.invoiceNetAmount = invoiceNetAmount;
+  }
 
-  if (gstAmount !== undefined) updatedInventoryData.gstAmount = gstAmount;
+  if (gstAmount !== undefined) {
+    updatedInventoryData.gstAmount = gstAmount;
+  }
 
-  if (invoiceGrossAmount !== undefined)
+  if (invoiceGrossAmount !== undefined) {
     updatedInventoryData.invoiceGrossAmount = invoiceGrossAmount;
+  }
 
   if (status) updatedInventoryData.status = status;
 
-  if (vendorId) updatedInventoryData.vendor = { connect: { id: vendorId } };
+  if (vendorId) {
+    updatedInventoryData.vendor = {
+      connect: { id: vendorId },
+    };
+  }
 
+  // ✅ Update inventory
   await this.prisma.inventory.update({
     where: { id },
     data: updatedInventoryData,
   });
 
-  // ✅ IMPORTANT: handle products update safely
+  // =========================================================
+  // ✅ PRODUCTS UPDATE
+  // =========================================================
+
   if (products !== undefined) {
-    // delete all old product rows always
+    // Remove old products
     await this.prisma.productInventory.deleteMany({
       where: { inventoryId: id },
     });
@@ -180,23 +220,32 @@ macAddress: product.macAddress ?? null,
           }
 
           const isSerialEmpty =
-            !product.serialNumber || product.serialNumber.trim() === '';
+            !product.serialNumber ||
+            product.serialNumber.trim() === '';
+
           const isMacEmpty =
-            !product.macAddress || product.macAddress.trim() === '';
+            !product.macAddress ||
+            product.macAddress.trim() === '';
 
           let serials: string[];
 
+          // Generate serial if both empty
           if (isSerialEmpty && isMacEmpty) {
-            const generatedSerial = await this.generateNextSerialNumber(
-              product.productId,
-            );
+            const generatedSerial =
+              await this.generateNextSerialNumber(
+                product.productId,
+              );
             serials = [generatedSerial];
-          } else if (!isSerialEmpty) {
+          }
+          // Use provided serial(s)
+          else if (!isSerialEmpty) {
             serials = product.serialNumber
               .split(',')
               .map((sn) => sn.trim())
               .filter((sn) => sn !== '');
-          } else {
+          }
+          // MAC only case
+          else {
             serials = [''];
           }
 
@@ -325,39 +374,37 @@ macAddress: product.macAddress ?? null,
     return uniqueInvoices.length;
   }
 
-  async updateStatusBySerialOrMac(
-    serialNumber: string,
-    macAddress: string,
-    deliveryType: string,
-  ) {
-    const status = getStatusFromDeliveryType(deliveryType);
+ async updateStatusBySerialOrMac(
+  serialNumber?: string,
+  macAddress?: string,
+  deliveryType?: string,
+) {
+  const status = getStatusFromDeliveryType(deliveryType ?? '');
 
-    const inventory = await this.prisma.inventory.findFirst({
-      where: {
-        OR: [
-          {
-            products: {
-              some: {
-                serialNumber: serialNumber ?? undefined,
-                macAddress: macAddress ?? undefined,
-              },
-            },
-          },
-        ],
+  const inventory = await this.prisma.inventory.findFirst({
+    where: {
+      products: {
+        some: {
+          OR: [
+            serialNumber ? { serialNumber } : undefined,
+            macAddress ? { macAddress } : undefined,
+          ].filter(Boolean) as any,
+        },
       },
-    });
+    },
+  });
 
-    if (!inventory) {
-      throw new NotFoundException(
-        `No inventory found for Serial: ${serialNumber} or MAC: ${macAddress}`,
-      );
-    }
-
-    return this.prisma.inventory.update({
-      where: { id: inventory.id },
-      data: { status },
-    });
+  if (!inventory) {
+    throw new NotFoundException(
+      `No inventory found for Serial: ${serialNumber ?? ''} or MAC: ${macAddress ?? ''}`,
+    );
   }
+
+  return this.prisma.inventory.update({
+    where: { id: inventory.id },
+    data: { status },
+  });
+}
 
   async findAll() {
     return this.prisma.inventory.findMany({

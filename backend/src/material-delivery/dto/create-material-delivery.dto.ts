@@ -9,18 +9,23 @@ import {
 import { Type } from 'class-transformer';
 
 export class MaterialDeliveryItemDto {
+
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   inventoryId?: number;
 
   @IsNumber()
+  @Type(() => Number)
   productId: number;
 
+  @IsOptional()
   @IsString()
-  serialNumber: string;
+  serialNumber?: string;
 
+  @IsOptional()
   @IsString()
-  macAddress: string;
+  macAddress?: string;
 }
 
 export enum DeliveryType {

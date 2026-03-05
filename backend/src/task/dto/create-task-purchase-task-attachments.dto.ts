@@ -16,4 +16,7 @@ export class CreateTaskPurchaseAttachmentDto {
   @IsNumber()
   @IsNotEmpty()
   fileSize: number;
+
+
+
 }

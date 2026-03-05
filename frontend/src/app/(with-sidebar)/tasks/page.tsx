@@ -32,6 +32,17 @@ interface Engineer {
   telegramChatId?: string;
 }
 
+interface TaskEngineerAssignment {
+  id?: number;
+  taskId: number;
+  engineerId: number | null;
+  proposedDateTime: string;
+  priority: string;
+  status: string;
+  notes?: string;
+  engineer?: Engineer;
+}
+
 interface ServiceWorkscopeCategory {
   id: number;
   workscopeCategoryName: string;
@@ -98,7 +109,7 @@ interface Task {
   department?: string;
   customer?: string;
   site?: string;
-  addressBook?: string;
+  addressBook?: string | AddressBook;
   workscopeCat?: string;
   createdBy: string;
   description?: string;
@@ -112,6 +123,7 @@ interface Task {
   engineerId?: number | null;
   engineerTaskId?: string;
   engineer?: Engineer;
+  engineerAssignments?: TaskEngineerAssignment[];
   taskType?: TaskType;        // 🔥 NEW
   purchase?: TaskPurchase;    // 🔥 NEW
   taskPurchaseAttachments?: {
@@ -167,6 +179,9 @@ interface TaskFormData {
   siteId: number | null;
   taskType?: string;
   engineerId?: number | null;
+
+  engineerAssignments: TaskEngineerAssignment[];
+
 
   title?: string;
   description?: string;
@@ -233,6 +248,13 @@ interface TaskModalProps {
   editingSavedSchedule: number | null;
   purchaseFile: File | null;
   setPurchaseFile: Dispatch<SetStateAction<File | null>>;
+  // Add these lines to TaskModalProps interface
+onAddEngineerAssignment: () => void;
+onRemoveEngineerAssignment: (index: number) => void;
+onUpdateEngineerAssignment: (index: number, field: keyof TaskEngineerAssignment, value: any) => void;
+onSaveEngineerAssignment: (index: number) => void;
+onRemoveSavedEngineerAssignment: (id: number) => void;
+savedEngineerAssignments: TaskEngineerAssignment[];
   inventories: any[];
   productTypes: any[];
   onClose: () => void;
@@ -278,7 +300,6 @@ interface TaskModalProps {
   onOpenInventoryModal: () => void;
   onRemoveInventory: (index: number) => void;
   savedPurchaseAttachments: any[];
-
 }
 
 
@@ -300,6 +321,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
   departments,
   engineers,
   addressBooks,
+  sites,
   serviceWorkscopeCategories,
   customerSearch,
   showCustomerDropdown,
@@ -337,6 +359,12 @@ const TaskModal: React.FC<TaskModalProps> = ({
   onEditLatestRemark,
   onOpenInventoryModal,
   onRemoveInventory,
+    onAddEngineerAssignment,
+  onRemoveEngineerAssignment,
+  onUpdateEngineerAssignment,
+  onSaveEngineerAssignment,
+  onRemoveSavedEngineerAssignment,
+  savedEngineerAssignments,
 
 }) => {
   // ✅ Hooks MUST be before any return
@@ -367,6 +395,10 @@ const TaskModal: React.FC<TaskModalProps> = ({
       });
     }
   }, [showModal, customerActiveIndex]);
+
+
+  
+  
 
   return (
     <SlideFormPanel
@@ -406,28 +438,6 @@ const TaskModal: React.FC<TaskModalProps> = ({
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-900 mb-1">
-                    Engineer
-                  </label>
-                  <select
-                    value={formData.engineerId ?? ""}
-                    onChange={(e) =>
-                      onFormDataChange({
-                        ...formData,
-                        engineerId: e.target.value ? Number(e.target.value) : null,
-                      })
-                    }
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
-                  >
-                    <option value="">Select Engineer (Optional)</option>
-                    {engineers.map((eng) => (
-                      <option key={eng.id} value={eng.id}>
-                        {eng.engineerId} - {eng.firstName} {eng.lastName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
               </div>
             </div>
 
@@ -808,127 +818,158 @@ const TaskModal: React.FC<TaskModalProps> = ({
             {!isPurchaseDepartment && (
               <>
                 {/* Customer and Site Selection for Technical & Billing */}
-                {(isTechnicalDepartment || isBillingDepartment) && (
-                  <div className="border-b pb-4">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Customer Information</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="relative">
-                        <label className="block text-sm font-medium text-gray-900 mb-1">
-                          Customer <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={customerSearch}
-                          onChange={(e) => {
-                            onCustomerSearchChange(e.target.value);
-                            onShowCustomerDropdownChange(true);
-                          }}
-                          onFocus={() => onShowCustomerDropdownChange(true)}
-                          onKeyDown={(e) => {
-                            if (!showCustomerDropdown && customerSearch.trim().length > 0) {
-                              onShowCustomerDropdownChange(true);
-                            }
+             {/* Customer and Site Selection for Technical & Billing */}
+{(isTechnicalDepartment || isBillingDepartment) && (
+  <div className="border-b pb-4">
+    <h3 className="text-lg font-semibold text-gray-900 mb-3">Customer Information</h3>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="relative">
+        <label className="block text-sm font-medium text-gray-900 mb-1">
+          Customer <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="text"
+          value={customerSearch}
+          onChange={(e) => {
+            onCustomerSearchChange(e.target.value);
+            onShowCustomerDropdownChange(true);
+            // Clear selected customer when typing
+            onFormDataChange({
+              ...formData,
+              addressBookId: null,
+              siteId: null
+            });
+          }}
+          onFocus={() => onShowCustomerDropdownChange(true)}
+          onKeyDown={(e) => {
+            if (!showCustomerDropdown && customerSearch.trim().length > 0) {
+              onShowCustomerDropdownChange(true);
+            }
 
-                            if (!showCustomerDropdown) return;
+            if (!showCustomerDropdown) return;
 
-                            if (e.key === "ArrowDown") {
-                              e.preventDefault();
-                              setCustomerActiveIndex((prev) => {
-                                if (filteredCustomers.length === 0) return -1;
-                                return prev < filteredCustomers.length - 1 ? prev + 1 : 0;
-                              });
-                            }
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setCustomerActiveIndex((prev) => {
+                if (filteredCustomers.length === 0) return -1;
+                return prev < filteredCustomers.length - 1 ? prev + 1 : 0;
+              });
+            }
 
-                            if (e.key === "ArrowUp") {
-                              e.preventDefault();
-                              setCustomerActiveIndex((prev) => {
-                                if (filteredCustomers.length === 0) return -1;
-                                return prev > 0 ? prev - 1 : filteredCustomers.length - 1;
-                              });
-                            }
+            if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setCustomerActiveIndex((prev) => {
+                if (filteredCustomers.length === 0) return -1;
+                return prev > 0 ? prev - 1 : filteredCustomers.length - 1;
+              });
+            }
 
-                            if (e.key === "Enter") {
-                              e.preventDefault();
+            if (e.key === "Enter") {
+              e.preventDefault();
+              if (customerActiveIndex >= 0 && filteredCustomers[customerActiveIndex]) {
+                const customer = filteredCustomers[customerActiveIndex];
+                onFormDataChange({ 
+                  ...formData, 
+                  addressBookId: customer.id, 
+                  siteId: null 
+                });
+                onCustomerSearchChange(`${customer.addressBookID} - ${customer.customerName}`);
+                onShowCustomerDropdownChange(false);
+              }
+            }
 
-                              if (customerActiveIndex >= 0 && filteredCustomers[customerActiveIndex]) {
-                                const customer = filteredCustomers[customerActiveIndex];
+            if (e.key === "Escape") {
+              onShowCustomerDropdownChange(false);
+            }
+          }}
+          placeholder="Search customer..."
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+          required={isTechnicalDepartment || isBillingDepartment}
+        />
 
-                                onFormDataChange({ ...formData, addressBookId: customer.id, siteId: null });
-                                onCustomerSearchChange(`${customer.addressBookID} - ${customer.customerName}`);
-                                onShowCustomerDropdownChange(false);
-                              }
-                            }
+        {showCustomerDropdown && customerSearch && (
+          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+            {filteredCustomers.length > 0 ? (
+              filteredCustomers.map((customer, index) => (
+                <div
+                  key={customer.id}
+                  ref={(el) => { customerItemRefs.current[index] = el; }}
+                  onMouseEnter={() => setCustomerActiveIndex(index)}
+                  className={`px-3 py-2 cursor-pointer text-gray-900 ${
+                    customerActiveIndex === index ? "bg-blue-100" : "hover:bg-gray-100"
+                  }`}
+                  onClick={() => {
+                    onFormDataChange({ 
+                      ...formData, 
+                      addressBookId: customer.id, 
+                      siteId: null 
+                    });
+                    onCustomerSearchChange(`${customer.addressBookID} - ${customer.customerName}`);
+                    onShowCustomerDropdownChange(false);
+                  }}
+                >
+                  {customer.addressBookID} - {customer.customerName}
+                </div>
+              ))
+            ) : (
+              <div className="px-3 py-2 text-gray-500">No customers found</div>
+            )}
+          </div>
+        )}
+        
+        {/* Show selected customer */}
+        {formData.addressBookId && (
+          <div className="mt-2 text-sm text-green-600 bg-green-50 p-2 rounded border border-green-200">
+            Selected: {addressBooks.find(ab => ab.id === formData.addressBookId)?.customerName}
+            <button
+              type="button"
+              onClick={() => {
+                onFormDataChange({ ...formData, addressBookId: null, siteId: null });
+                onCustomerSearchChange("");
+              }}
+              className="ml-2 text-red-600 hover:text-red-800"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+      </div>
 
-                            if (e.key === "Escape") {
-                              onShowCustomerDropdownChange(false);
-                            }
-                          }}
-                          placeholder="Search customer..."
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
-                          required={isTechnicalDepartment || isBillingDepartment}
-                        />
-
-                        {showCustomerDropdown && customerSearch && (
-                          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                            {filteredCustomers.map((customer, index) => (
-                              <div
-                                key={customer.id}
-                                ref={(el) => { customerItemRefs.current[index] = el; }}
-                                onMouseEnter={() => setCustomerActiveIndex(index)}
-                                className={`px-3 py-2 cursor-pointer text-gray-900
-      ${customerActiveIndex === index ? "bg-blue-100" : "hover:bg-gray-100"}
-    `}
-                                onClick={() => {
-                                  onFormDataChange({ ...formData, addressBookId: customer.id, siteId: null });
-                                  onCustomerSearchChange(`${customer.addressBookID} - ${customer.customerName}`);
-                                  onShowCustomerDropdownChange(false);
-                                }}
-                              >
-                                {customer.addressBookID} - {customer.customerName}
-                              </div>
-                            ))}
-
-                            {filteredCustomers.length === 0 && (
-                              <div className="px-3 py-2 text-gray-500">No customers found</div>
-                            )}
-                          </div>
-                        )}
-                        {formData.addressBookId !== null && formData.addressBookId > 0 && (
-                          <div className="mt-1 text-sm text-green-600">
-                            Selected: {addressBooks.find(ab => ab.id === formData.addressBookId)?.customerName}
-                          </div>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-900 mb-1">
-                          {isBillingDepartment ? "Branch" : "Site"} <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                          value={formData.siteId ?? ""}
-                          onChange={(e) =>
-                            onFormDataChange({
-                              ...formData,
-                              siteId: e.target.value ? Number(e.target.value) : null,
-                            })
-                          }
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
-                          required={isTechnicalDepartment || isBillingDepartment}
-                          disabled={!formData.addressBookId}
-                        >
-                          <option value="" disabled>
-                            Select {isBillingDepartment ? "Branch" : "Site"}
-                          </option>
-                          {filteredSites.map((site) => (
-                            <option key={site.id} value={site.id}>
-                              {site.siteID} - {site.siteName}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                )}
+      <div>
+        <label className="block text-sm font-medium text-gray-900 mb-1">
+          {isBillingDepartment ? "Branch" : "Site"} <span className="text-red-500">*</span>
+        </label>
+        <select
+          value={formData.siteId ?? ""}
+          onChange={(e) => {
+            const siteId = e.target.value ? Number(e.target.value) : null;
+            onFormDataChange({
+              ...formData,
+              siteId: siteId,
+            });
+          }}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+          required={isTechnicalDepartment || isBillingDepartment}
+          disabled={!formData.addressBookId}
+        >
+          <option value="">Select {isBillingDepartment ? "Branch" : "Site"}</option>
+          {filteredSites.map((site) => (
+            <option key={site.id} value={site.id}>
+              {site.siteID} - {site.siteName}
+            </option>
+          ))}
+        </select>
+        
+        {/* Show selected site */}
+        {formData.siteId && (
+          <div className="mt-2 text-sm text-blue-600 bg-blue-50 p-2 rounded border border-blue-200">
+            Selected: {sites.find(s => s.id === formData.siteId)?.siteName}
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+)}
 
                 {/* SALES DEPARTMENT FIELDS */}
                 {isSalesDepartment && (
@@ -1325,6 +1366,119 @@ const TaskModal: React.FC<TaskModalProps> = ({
                   </div>
                 )}
 
+                {/* Engineer Assignments - For Technical Department */}
+{isTechnicalDepartment && (
+  <div className="border-b pb-4">
+    <div className="flex justify-between items-center mb-3">
+      <h3 className="text-lg font-semibold text-gray-900">Engineer Assignments</h3>
+      <button
+        type="button"
+        onClick={onAddEngineerAssignment}
+        className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+      >
+        + Assign Engineer
+      </button>
+    </div>
+
+    {formData.engineerAssignments.length > 0 && formData.engineerAssignments.map((assignment, index) => (
+      <div key={index} className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6 p-4 bg-white rounded-lg border">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Proposed Date & Time
+          </label>
+          <input
+            type="datetime-local"
+            value={assignment.proposedDateTime || ''}
+            onChange={(e) => onUpdateEngineerAssignment(index, 'proposedDateTime', e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 text-black bg-white"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Engineer
+          </label>
+          <select
+            value={assignment.engineerId || ''}
+            onChange={(e) => onUpdateEngineerAssignment(index, 'engineerId', e.target.value ? Number(e.target.value) : null)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 text-black bg-white"
+          >
+            <option value="">Select Engineer</option>
+            {engineers.map((eng) => (
+              <option key={eng.id} value={eng.id}>
+                {eng.engineerId} - {eng.firstName} {eng.lastName}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        
+
+        <div className="flex items-end gap-2">
+          <button
+            type="button"
+            onClick={() => onSaveEngineerAssignment(index)}
+            disabled={!assignment.engineerId || !assignment.proposedDateTime}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+          >
+            Save Assignment
+          </button>
+          {formData.engineerAssignments.length > 1 && (
+            <button
+              type="button"
+              onClick={() => onRemoveEngineerAssignment(index)}
+              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      </div>
+    ))}
+
+    {/* Saved Engineer Assignments Table */}
+    {savedEngineerAssignments.length > 0 && (
+      <div className="bg-white rounded-lg border overflow-hidden mb-4">
+        <table className="w-full text-sm">
+          <thead className="bg-blue-50">
+            <tr>
+              <th className="p-3 text-left text-blue-800 font-semibold">Date & Time</th>
+              <th className="p-3 text-left text-blue-800 font-semibold">Engineer</th>    
+              <th className="p-3 text-left text-blue-800 font-semibold w-20">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {savedEngineerAssignments.map((assignment) => {
+              const engineer = engineers.find(e => e.id === assignment.engineerId);
+              return (
+                <tr key={assignment.id} className="border-t border-gray-200 hover:bg-gray-50">
+                  <td className="p-3 text-gray-700">
+                    {assignment.proposedDateTime ? new Date(assignment.proposedDateTime).toLocaleString() : 'N/A'}
+                  </td>
+                  <td className="p-3 text-gray-700">
+                    {engineer ? `${engineer.engineerId} - ${engineer.firstName} ${engineer.lastName}` : 'N/A'}
+                  </td>
+                              <td className="p-3">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onRemoveSavedEngineerAssignment(assignment.id!)}
+                        className="text-red-600 hover:text-red-800 font-medium text-sm"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </div>
+)}
+
                 {/* Schedule (Only for Technical) */}
                 {isTechnicalDepartment && (
                   <div className="border-b pb-4">
@@ -1566,6 +1720,8 @@ const TaskModal: React.FC<TaskModalProps> = ({
               )}
             </div>
 
+
+
             {/* Form Actions - ALWAYS SHOW */}
             <div className="flex justify-end gap-3 pt-4 border-t">
               <button
@@ -1645,6 +1801,9 @@ const RemarksModal: React.FC<RemarksModalProps> = ({
     if (normalized.includes('Progress') || normalized.includes('Wip') || normalized === 'Wip') return 'Work in Progress';
     return normalized;
   };
+
+
+  
 
   const getCurrentTaskStatus = () => {
     if (!task?.remarks || task.remarks.length === 0) return 'Open';
@@ -2111,6 +2270,7 @@ export default function TasksPage() {
     createdAt: new Date().toISOString(),
     description: '',
     title: '',
+    engineerAssignments: [],
     contacts: [], // Start with empty array
     workscopeDetails: [], // Start with empty array
     schedule: [], // Start with empty array
@@ -2160,6 +2320,9 @@ export default function TasksPage() {
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [showWorkscopeDropdown, setShowWorkscopeDropdown] = useState(false);
 
+  const [savedEngineerAssignments, setSavedEngineerAssignments] = useState<TaskEngineerAssignment[]>([]);
+
+
   // Saved items state
   const [savedContacts, setSavedContacts] = useState<TasksContacts[]>([]);
   const [savedWorkscopeDetails, setSavedWorkscopeDetails] = useState<TasksWorkscopeDetails[]>([]);
@@ -2170,6 +2333,8 @@ export default function TasksPage() {
   const [editingSavedContact, setEditingSavedContact] = useState<number | null>(null);
   const [editingSavedWorkscope, setEditingSavedWorkscope] = useState<number | null>(null);
   const [editingSavedSchedule, setEditingSavedSchedule] = useState<number | null>(null);
+  const [editingSavedEngineer, setEditingSavedEngineer] = useState<number | null>(null);
+
 
   // Remark editing states
   const [showEditRemarkModal, setShowEditRemarkModal] = useState(false);
@@ -2478,6 +2643,7 @@ export default function TasksPage() {
           priority: "Medium",
         }
       ],
+      engineerAssignments: [],
       // Start with one empty remark for adding new remarks
       remarks: [{
         taskId: 0,
@@ -2499,7 +2665,7 @@ export default function TasksPage() {
     setSavedWorkscopeDetails([]);
     setSavedSchedule([]);
     setSavedRemarks([]);
-
+setSavedEngineerAssignments([]);
     setInventories([]);
     setEditingId(null);
     setShowModal(true);
@@ -2520,7 +2686,7 @@ export default function TasksPage() {
       taskID: '',
       userId: userId || 0,
       departmentId: departments.length > 0 ? departments[0].id : 0,
-      addressBookId: 0,
+      addressBookId: null,
       siteId: null,
       engineerId: null,
       status: 'Open',
@@ -2530,6 +2696,7 @@ export default function TasksPage() {
       title: '',
       contacts: [],
       workscopeDetails: [],
+      engineerAssignments: [],
       schedule: [
         {
           taskId: 0,
@@ -2553,6 +2720,7 @@ export default function TasksPage() {
     setPurchaseFile(null);
     setCustomerSearch("");
     setShowCustomerDropdown(false);
+    setSavedEngineerAssignments([]);
 
   };
 
@@ -2685,12 +2853,25 @@ export default function TasksPage() {
           return uniq.length ? uniq : undefined;
         })(),
 
+          engineerAssignments: savedEngineerAssignments.length > 0 
+    ? savedEngineerAssignments.map(a => ({
+        engineerId: a.engineerId,
+        proposedDateTime: a.proposedDateTime,
+        priority: a.priority,
+        status: a.status,
+        notes: a.notes || '',
+      }))
+    : undefined,
+
+
         workscopeDetails: (() => {
           const fromSaved = (savedWorkscopeDetails || []).map((w: any) => ({
             workscopeCategoryId: Number(w.workscopeCategoryId),
             workscopeDetails: (w.workscopeDetails || "").trim(),
             extraNote: (w.extraNote || "").trim(),
           }));
+
+          
 
           const fromForm = (formData.workscopeDetails || []).map((w: any) => ({
             workscopeCategoryId: Number(w.workscopeCategoryId),
@@ -3188,6 +3369,54 @@ export default function TasksPage() {
     }
   };
 
+// Add these with other handler functions (around line 1800-1900)
+// Engineer Assignment handlers
+const handleAddEngineerAssignment = () => {
+  setFormData(prev => ({
+    ...prev,
+    engineerAssignments: [
+      ...prev.engineerAssignments,
+      {
+        taskId: 0,
+        engineerId: null,
+        proposedDateTime: '',
+        priority: 'Medium',
+        status: 'Assigned',
+        notes: '',
+      }
+    ]
+  }));
+};
+
+const handleRemoveEngineerAssignment = (index: number) => {
+  setFormData(prev => ({
+    ...prev,
+    engineerAssignments: prev.engineerAssignments.filter((_, i) => i !== index)
+  }));
+};
+
+const handleUpdateEngineerAssignment = (index: number, field: keyof TaskEngineerAssignment, value: any) => {
+  setFormData(prev => ({
+    ...prev,
+    engineerAssignments: prev.engineerAssignments.map((assignment, i) =>
+      i === index ? { ...assignment, [field]: value } : assignment
+    )
+  }));
+};
+
+const handleSaveEngineerAssignment = (index: number) => {
+  const assignment = formData.engineerAssignments[index];
+  if (assignment.engineerId && assignment.proposedDateTime) {
+    setSavedEngineerAssignments(prev => [...prev, { ...assignment, id: Date.now() }]);
+    handleRemoveEngineerAssignment(index);
+    toast({ title: "Engineer assigned", description: "Engineer has been assigned to the task.", variant: "success" });
+  }
+};
+
+const handleRemoveSavedEngineerAssignment = (id: number) => {
+  setSavedEngineerAssignments(prev => prev.filter(assignment => assignment.id !== id));
+};
+
   const handleRemoveSavedSchedule = (id: number) => {
     setSavedSchedule(prev => prev.filter(schedule => schedule.id !== id));
   };
@@ -3300,43 +3529,53 @@ export default function TasksPage() {
   };
 
   // In the handleEditTask function, update the inventory loading part:
-  const handleEditTask = async (task: Task) => {
-    let taskStatus = 'Open';
-    if (task.remarks && task.remarks.length > 0) {
-      const sortedRemarks = [...task.remarks].sort((a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-      taskStatus = sortedRemarks[0]?.status || 'Open';
-    }
+ // Replace your existing handleEditTask function
+const handleEditTask = async (task: Task) => {
+  let taskStatus = 'Open';
+  if (task.remarks && task.remarks.length > 0) {
+    const sortedRemarks = [...task.remarks].sort((a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    taskStatus = sortedRemarks[0]?.status || 'Open';
+  }
 
-    const actualUserName = localStorage.getItem("username") || currentUserName || "User";
+  const actualUserName = localStorage.getItem("username") || currentUserName || "User";
 
+  // Set the customer search value if addressBook exists
+  if (task.addressBook && typeof task.addressBook === 'object') {
+    setCustomerSearch(`${task.addressBook.addressBookID} - ${task.addressBook.customerName}`);
+  }
 
-    setFormData({
-      taskID: task.taskID,
-      userId: task.userId,
-      departmentId: task.departmentId,
-      addressBookId: task.addressBookId,
-      siteId: task.siteId,
-      engineerId: task.engineerId || null,
-      status: taskStatus,
-      createdBy: actualUserName, // Use actual user name
-      createdAt: task.createdAt,
-      description: task.description || '',
-      title: task.title || '',
-      // Start with empty arrays for adding new items
-      contacts: [],
-      workscopeDetails: [],
-      schedule: [
-        {
-          taskId: task.id || 0,
-          proposedDateTime: "",
-          priority: "Medium",
-        }
-      ],
-      taskType: task.taskType || "SERVICE",
-      purchase: task.purchase
-        ? {
+  // Load engineer assignments
+  if (task.engineerAssignments) {
+    setSavedEngineerAssignments(task.engineerAssignments);
+  }
+
+  setFormData({
+    taskID: task.taskID,
+    userId: task.userId,
+    departmentId: task.departmentId,
+    addressBookId: task.addressBookId,
+    siteId: task.siteId,
+    engineerId: task.engineerId || null,
+    status: taskStatus,
+    createdBy: actualUserName,
+    createdAt: task.createdAt,
+    description: task.description || '',
+    title: task.title || '',
+    contacts: [],
+    workscopeDetails: [],
+    engineerAssignments: [], // Keep this empty for new assignments
+    schedule: [
+      {
+        taskId: task.id || 0,
+        proposedDateTime: "",
+        priority: "Medium",
+      }
+    ],
+    taskType: task.taskType || "SERVICE",
+    purchase: task.purchase
+      ? {
           purchaseType: task.purchase.purchaseType,
           customerName: task.purchase.customerName || "",
           address: task.purchase.address || "",
@@ -3353,73 +3592,64 @@ export default function TasksPage() {
             availability: p.availability || "",
           })),
         }
-        : undefined,
+      : undefined,
+    remarks: [{
+      taskId: 0,
+      remark: '',
+      status: 'Open',
+      createdBy: actualUserName,
+      createdAt: new Date().toISOString()
+    }]
+  });
 
+  setSavedContacts(task.contacts || []);
+  setSavedWorkscopeDetails(
+    (task.workscopeDetails || []).map(w => ({
+      id: w.id!,
+      taskId: w.taskId!,
+      workscopeCategoryId: Number(w.workscopeCategoryId),
+      workscopeDetails: w.workscopeDetails,
+      extraNote: w.extraNote || ""
+    }))
+  );
+  
+  setSavedSchedule(task.schedule || []);
+  setSavedRemarks(task.remarks || []);
+  
+  // Load task inventories
+  if (task.taskInventories) {
+    setInventories(task.taskInventories.map((inv: any) => ({
+      productTypeId: inv.productTypeId,
+      productName: productTypes.find(pt => pt.id === inv.productTypeId)?.productName || 'Unknown',
+      makeModel: inv.makeModel,
+      snMac: inv.snMac,
+      description: inv.description,
+      purchaseDate: inv.purchaseDate,
+      warrantyPeriod: inv.warrantyPeriod,
+      thirdPartyPurchase: inv.thirdPartyPurchase,
+      warrantyStatus: inv.warrantyStatus ?? "Active"
+    })));
+  } else {
+    setInventories([]);
+  }
 
-      // Start with one empty remark for adding new ones
-      remarks: [{
-        taskId: 0,
-        remark: '',
-        status: 'Open',
-        createdBy: actualUserName, // Use actual user name
-        createdAt: new Date().toISOString()
-      }]
+  // Fetch attachments
+  try {
+    const token = getAuthToken();
+    const res = await fetch(`http://localhost:8000/task/${task.id}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
+    const fullTask = res.ok ? await res.json() : task;
+    const attachments = fullTask?.taskPurchaseAttachments || fullTask?.purchase?.taskPurchaseAttachments || [];
+    setSavedPurchaseAttachments(Array.isArray(attachments) ? attachments : []);
+  } catch (e) {
+    console.error("Failed to load task details for attachments", e);
+    setSavedPurchaseAttachments(task.taskPurchaseAttachments || []);
+  }
 
-    setSavedContacts(task.contacts || []);
-    setSavedWorkscopeDetails(
-      (task.workscopeDetails || []).map(w => ({
-        id: w.id!,
-        taskId: w.taskId!,
-        workscopeCategoryId: Number(w.workscopeCategoryId),
-        workscopeDetails: w.workscopeDetails,
-        extraNote: w.extraNote || ""
-      }))
-    );
-    // Always fetch fresh task details (so attachments definitely come)
-    try {
-      const token = getAuthToken();
-      const res = await fetch(`http://localhost:8000/task/${task.id}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-
-      const fullTask = res.ok ? await res.json() : task;
-
-      // attachments may come either at root OR inside purchase (depends on your backend include)
-      const attachments =
-        fullTask?.taskPurchaseAttachments ||
-        fullTask?.purchase?.taskPurchaseAttachments ||
-        [];
-
-      setSavedPurchaseAttachments(Array.isArray(attachments) ? attachments : []);
-    } catch (e) {
-      console.error("Failed to load task details for attachments", e);
-      setSavedPurchaseAttachments(task.taskPurchaseAttachments || []);
-    }
-    setSavedSchedule(task.schedule || []);
-    setSavedRemarks(task.remarks || []);
-
-    // Load task inventories if they exist - FIXED: Use actual warrantyStatus from API
-    if (task.taskInventories) {
-      setInventories(task.taskInventories.map((inv: any) => ({
-        productTypeId: inv.productTypeId,
-        productName: productTypes.find(pt => pt.id === inv.productTypeId)?.productName || 'Unknown',
-        makeModel: inv.makeModel,
-        snMac: inv.snMac,
-        description: inv.description,
-        purchaseDate: inv.purchaseDate,
-        warrantyPeriod: inv.warrantyPeriod,
-        thirdPartyPurchase: inv.thirdPartyPurchase,
-        // FIX: Use the actual warrantyStatus from API, default to "Active" only if null/undefined
-        warrantyStatus: inv.warrantyStatus ?? "Active"
-      })));
-    } else {
-      setInventories([]);
-    }
-
-    setEditingId(task.id || null);
-    setShowModal(true);
-  };
+  setEditingId(task.id || null);
+  setShowModal(true);
+};
 
   // Remark editing handlers
   const handleOpenEditRemarkModal = (remark: TasksRemarks) => {
@@ -3573,14 +3803,7 @@ export default function TasksPage() {
       resetForm();
     };
 
-    const handleDelete = (index: number) => {
-      if (confirm('Are you sure you want to remove this inventory item?')) {
-        setInventories(prev => prev.filter((_, i) => i !== index));
-        if (editingIndex === index) {
-          resetForm();
-        }
-      }
-    };
+    
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50">
@@ -3921,22 +4144,22 @@ export default function TasksPage() {
                         </TableCell>
 
 
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              asChild
-                              className="h-8 w-8 p-0 text-blue-600 hover:text-blue-800"
-                            >
-                              <a
-                                href={`/tasks/view/${task.taskID}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                <ExternalLink className="h-4 w-4" />
-                              </a>
-                            </Button>
+                      <TableCell>
+  <div className="flex items-center gap-1">
+    <Button
+      variant="ghost"
+      size="sm"
+      asChild
+      className="h-8 w-8 p-0 text-blue-600 hover:text-blue-800"
+    >
+      <a
+        href={`/tasks/view/${task.engineerAssignments?.[0]?.engineer?.engineerId || 'ENG001'}/${task.taskID}`}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <ExternalLink className="h-4 w-4" />
+      </a>
+    </Button>
 
                             <Button
                               variant="ghost"
@@ -4016,16 +4239,23 @@ export default function TasksPage() {
         </div>
 
         {/* Task Modal */}
-        <TaskModal
-          loading={loading}
-          purchaseFile={purchaseFile}
-          setPurchaseFile={setPurchaseFile}
-          savedPurchaseAttachments={savedPurchaseAttachments}
-          isPurchaseDepartment={isPurchaseDepartment}
-          isBillingDepartment={isBillingDepartment}
-          isSalesDepartment={isSalesDepartment}
-          isHRAdminDepartment={isHRAdminDepartment}
-          isTechnicalDepartment={isTechnicalDepartment}
+  <TaskModal
+    loading={loading}
+    purchaseFile={purchaseFile}
+    setPurchaseFile={setPurchaseFile}
+    savedPurchaseAttachments={savedPurchaseAttachments}
+    isPurchaseDepartment={isPurchaseDepartment}
+    isBillingDepartment={isBillingDepartment}
+    isSalesDepartment={isSalesDepartment}
+    isHRAdminDepartment={isHRAdminDepartment}
+    isTechnicalDepartment={isTechnicalDepartment}
+    savedEngineerAssignments={savedEngineerAssignments}
+    onAddEngineerAssignment={handleAddEngineerAssignment}
+    onRemoveEngineerAssignment={handleRemoveEngineerAssignment}
+    onUpdateEngineerAssignment={handleUpdateEngineerAssignment}
+    onSaveEngineerAssignment={handleSaveEngineerAssignment}
+    onRemoveSavedEngineerAssignment={handleRemoveSavedEngineerAssignment}
+  
           showModal={showModal}
           editingId={editingId}
           formData={formData}

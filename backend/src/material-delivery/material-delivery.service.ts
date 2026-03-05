@@ -69,8 +69,8 @@ export class MaterialDeliveryService {
               create: {
                 inventoryId: productInventory.inventoryId, // ✅ Use actual Inventory ID
                 productId: item.productId,
-                serialNumber: item.serialNumber,
-                macAddress: item.macAddress,
+                serialNumber: item.serialNumber ?? '',
+                macAddress: item.macAddress ?? '',
               },
             },
           },
@@ -79,11 +79,11 @@ export class MaterialDeliveryService {
           },
         });
 
-        await this.inventoryService.updateStatusBySerialOrMac(
-          item.serialNumber,
-          item.macAddress,
-          data.deliveryType,
-        );
+      await this.inventoryService.updateStatusBySerialOrMac(
+  item.serialNumber ?? '',
+  item.macAddress ?? '',
+  data.deliveryType,
+);
 
         createdDeliveries.push(created);
       }

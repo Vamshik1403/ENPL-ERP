@@ -15,4 +15,12 @@ export class TaskImageDto {
 
   @IsOptional()
   fileSize?: number;
+
+  @IsOptional()
+  uploadedBy?: string;
+
+  @IsOptional()
+  uploadedByName?: string;
+
+ 
 }

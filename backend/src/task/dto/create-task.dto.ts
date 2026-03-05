@@ -7,11 +7,35 @@ import {
   ValidateNested,
   IsBoolean,
   IsEnum,
+  IsDateString,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { TaskType } from '@prisma/client';
 import { CreateTaskPurchaseDto } from './create-task-purchase.dto';
-import { TaskImageDto } from './task-image.dto'; // Add this
+import { TaskImageDto } from './task-image.dto';
+
+// NEW: Engineer Assignment DTO
+export class CreateTaskEngineerAssignmentDto {
+  @IsInt()
+  @IsNotEmpty()
+  engineerId: number;
+
+  @IsOptional()
+  @IsDateString()
+  proposedDateTime?: string;
+
+  @IsOptional()
+  @IsString()
+  priority?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
 
 export class CreateTaskContactDto {
   @IsString()
@@ -56,7 +80,7 @@ export class CreateTaskRemarkDto {
   @IsNotEmpty()
   remark: string;
 
-  @IsOptional() // Make status optional, will default to 'Open'
+  @IsOptional()
   @IsString()
   status?: string;
 }
@@ -114,9 +138,14 @@ export class CreateTaskDto {
   @IsInt()
   userId?: number;
 
+  // REMOVED: engineerId?: number;  ← Remove this line
+
+  // ADDED: Multiple engineer assignments
   @IsOptional()
-  @IsInt()
-  engineerId?: number;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateTaskEngineerAssignmentDto)
+  engineerAssignments?: CreateTaskEngineerAssignmentDto[];
 
   @IsOptional()
   @IsString()
@@ -172,7 +201,6 @@ export class CreateTaskDto {
   @Type(() => CreateTaskRemarkDto)
   remarks?: CreateTaskRemarkDto[];
 
-  // 🔥 Add task images
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })

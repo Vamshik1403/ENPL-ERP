@@ -8,6 +8,7 @@ import {
   UploadedFiles,
   Res,
   ParseIntPipe,
+  Body,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
@@ -22,8 +23,15 @@ export class TaskImagesController {
   async uploadImages(
     @Param('taskId', ParseIntPipe) taskId: number,
     @UploadedFiles() files: Array<Express.Multer.File>,
+    @Body('uploadedBy') uploadedBy?: string,
+    @Body('uploadedByName') uploadedByName?: string,
   ) {
-    return this.taskImagesService.uploadImages(taskId, files);
+    return this.taskImagesService.uploadImages(
+      taskId, 
+      files, 
+      uploadedBy, 
+      uploadedByName
+    );
   }
 
   @Get(':taskId')
@@ -34,8 +42,21 @@ export class TaskImagesController {
   @Get('image/:filename')
   async getImage(@Param('filename') filename: string, @Res() res: Response) {
     const stream = await this.taskImagesService.getImageStream(filename);
+    
+    // Detect mime type from filename
+    const ext = filename.split('.').pop()?.toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'pdf': 'application/pdf',
+    };
+    
+    const contentType = mimeTypes[ext || ''] || 'application/octet-stream';
+    
     res.set({
-      'Content-Type': 'image/jpeg',
+      'Content-Type': contentType,
       'Content-Disposition': `inline; filename="${filename}"`,
     });
     stream.pipe(res);
