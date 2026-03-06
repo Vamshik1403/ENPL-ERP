@@ -206,8 +206,10 @@ export default function SitesPage() {
       const response = await fetch('http://localhost:8000/sites');
       if (response.ok) {
         const data = await response.json();
-        setSites(data);
-        console.log('Branches loaded successfully:', data.length, 'entries');
+        // Handle both array and object responses
+        const sitesArray = Array.isArray(data) ? data : (data.data || []);
+        setSites(sitesArray);
+        console.log('Branches loaded successfully:', sitesArray.length, 'entries');
       } else {
         console.error('Failed to fetch sites:', response.status, response.statusText);
         setSites([]);
@@ -235,8 +237,8 @@ export default function SitesPage() {
 
           setFormData(prev => ({
             ...prev,
-            city: office.District,
-            state: office.State
+            city: office.District || '',
+            state: office.State || ''
           }));
         }
       } catch (err) {
@@ -278,8 +280,10 @@ export default function SitesPage() {
 
       if (response.ok) {
         const data = await response.json();
-        setAddressBooks(data);
-        console.log('Address books loaded successfully:', data.length, 'entries');
+        // Handle both array and object responses
+        const addressBooksArray = Array.isArray(data) ? data : (data.data || []);
+        setAddressBooks(addressBooksArray);
+        console.log('Address books loaded successfully:', addressBooksArray.length, 'entries');
       } else {
         console.error('Failed to fetch address books:', response.status, response.statusText);
         setAddressBooks([]);
@@ -293,30 +297,34 @@ export default function SitesPage() {
     }
   };
 
-  // Filter address books based on search
-  const filteredAddressBooks = addressBooks.filter(ab => {
-    if (!addressBookSearch.trim() || addressBookSearch.trim().length < 1) {
-      return false;
-    }
+  // SAFE FILTERING - Check if addressBooks is an array before filtering
+  const filteredAddressBooks = Array.isArray(addressBooks) 
+    ? addressBooks.filter(ab => {
+        if (!addressBookSearch.trim() || addressBookSearch.trim().length < 1) {
+          return false;
+        }
 
-    const searchTerm = addressBookSearch.toLowerCase().trim();
-    const customerName = (ab.customerName || '').toLowerCase();
-    const addressBookID = (ab.addressBookID || '').toLowerCase();
-    const addressType = (ab.addressType || '').toLowerCase();
+        const searchTerm = addressBookSearch.toLowerCase().trim();
+        const customerName = (ab.customerName || '').toLowerCase();
+        const addressBookID = (ab.addressBookID || '').toLowerCase();
+        const addressType = (ab.addressType || '').toLowerCase();
 
-    return customerName.includes(searchTerm) ||
-      addressBookID.includes(searchTerm) ||
-      addressType.includes(searchTerm);
-  });
+        return customerName.includes(searchTerm) ||
+          addressBookID.includes(searchTerm) ||
+          addressType.includes(searchTerm);
+      })
+    : [];
 
   // Filter sites based on search term
-  const filteredSites = sites.filter(item =>
-    item.siteName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.siteID?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.siteAddress.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.city?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.state?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredSites = Array.isArray(sites) 
+    ? sites.filter(item =>
+        item.siteName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item.siteID || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.siteAddress.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item.city || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item.state || '').toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    : [];
 
   // Pagination calculations
   const indexOfLastItem = currentPage * itemsPerPage;
@@ -401,6 +409,67 @@ export default function SitesPage() {
     setFormContacts(updatedContacts);
   };
 
+  const handleSiteContacts = async (siteId: number) => {
+    // First, fetch existing contacts to compare
+    let existingContacts: SiteContact[] = [];
+    try {
+      const response = await fetch(`http://localhost:8000/sites/${siteId}/contacts`);
+      if (response.ok) {
+        const data = await response.json();
+        existingContacts = Array.isArray(data) ? data : (data.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching existing contacts:', error);
+    }
+
+    // Find contacts to delete (exist in backend but not in form)
+    const formContactIds = formContacts
+      .filter(c => c.id)
+      .map(c => c.id);
+    
+    const contactsToDelete = existingContacts.filter(
+      existing => !formContactIds.includes(existing.id)
+    );
+
+    // Delete removed contacts
+    for (const contact of contactsToDelete) {
+      if (contact.id) {
+        console.log('Deleting contact:', contact.id);
+        await fetch(`http://localhost:8000/sites/contacts/${contact.id}`, {
+          method: 'DELETE',
+        });
+      }
+    }
+
+    // Update existing contacts and create new ones
+    for (const contact of formContacts) {
+      if (contact.contactPerson?.trim() && contact.contactNumber?.trim()) {
+        const contactData = {
+          contactPerson: contact.contactPerson,
+          designation: contact.designation || null,
+          contactNumber: contact.contactNumber,
+          emailAddress: contact.emailAddress || null,
+        };
+
+        if (contact.id) {
+          // Update existing contact
+          await fetch(`http://localhost:8000/sites/contacts/${contact.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(contactData),
+          });
+        } else {
+          // Create new contact
+          await fetch(`http://localhost:8000/sites/${siteId}/contacts`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(contactData),
+          });
+        }
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -416,10 +485,10 @@ export default function SitesPage() {
         addressBookId: formData.addressBookId,
         siteName: formData.siteName,
         siteAddress: formData.siteAddress,
-        city: formData.city,
-        state: formData.state,
-        pinCode: formData.pinCode,
-        gstNo: formData.gstNo,
+        city: formData.city || null,
+        state: formData.state || null,
+        pinCode: formData.pinCode || null,
+        gstNo: formData.gstNo || null,
       };
 
       let siteId: number;
@@ -437,7 +506,10 @@ export default function SitesPage() {
           siteId = editingId;
           await handleSiteContacts(siteId);
           await fetchSites();
+          toast({ title: 'Site updated successfully', variant: 'success' });
           closeModal();
+        } else {
+          toast({ title: 'Failed to update site', variant: 'error' });
         }
       } else {
         const response = await fetch('http://localhost:8000/sites', {
@@ -453,45 +525,17 @@ export default function SitesPage() {
           siteId = newSite.id;
           await handleSiteContacts(siteId);
           await fetchSites();
+          toast({ title: 'Site created successfully', variant: 'success' });
           closeModal();
+        } else {
+          toast({ title: 'Failed to create site', variant: 'error' });
         }
       }
     } catch (error) {
       console.error('Error submitting site:', error);
+      toast({ title: 'An error occurred', variant: 'error' });
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleSiteContacts = async (siteId: number) => {
-    const validContacts = formContacts.filter(contact =>
-      contact.contactPerson?.trim() &&
-      contact.designation?.trim() &&
-      contact.contactNumber?.trim() &&
-      contact.emailAddress?.trim()
-    );
-
-    for (const contact of validContacts) {
-      const contactData = {
-        contactPerson: contact.contactPerson,
-        designation: contact.designation,
-        contactNumber: contact.contactNumber,
-        emailAddress: contact.emailAddress,
-      };
-
-      if (contact.id) {
-        await fetch(`http://localhost:8000/sites/contacts/${contact.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(contactData),
-        });
-      } else {
-        await fetch(`http://localhost:8000/sites/${siteId}/contacts`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(contactData),
-        });
-      }
     }
   };
 
@@ -503,7 +547,16 @@ export default function SitesPage() {
 
     const item = sites.find(s => s.id === id);
     if (item) {
-      setFormData(item);
+      setFormData({
+        addressBookId: item.addressBookId,
+        siteName: item.siteName || '',
+        siteAddress: item.siteAddress || '',
+        city: item.city || '',
+        state: item.state || '',
+        pinCode: item.pinCode || '',
+        gstNo: item.gstNo || '',
+        useCustomerData: item.useCustomerData || false
+      });
       setEditingId(id);
       setShowForm(true);
 
@@ -516,7 +569,16 @@ export default function SitesPage() {
         const response = await fetch(`http://localhost:8000/sites/${id}/contacts`);
         if (response.ok) {
           const contactsData = await response.json();
-          setFormContacts(contactsData);
+          const contacts = Array.isArray(contactsData) ? contactsData : (contactsData.data || []);
+          // Ensure all fields have at least empty string
+          const formattedContacts = contacts.map((c: any) => ({
+            ...c,
+            contactPerson: c.contactPerson || '',
+            designation: c.designation || '',
+            contactNumber: c.contactNumber || '',
+            emailAddress: c.emailAddress || '',
+          }));
+          setFormContacts(formattedContacts);
         } else {
           setFormContacts([]);
         }
@@ -542,12 +604,13 @@ export default function SitesPage() {
 
         if (response.ok) {
           setSites(sites.filter(s => s.id !== id));
-          console.log('Site deleted successfully');
+          toast({ title: 'Site deleted successfully', variant: 'success' });
         } else {
-          console.error('Failed to delete site:', response.statusText);
+          toast({ title: 'Failed to delete site', variant: 'error' });
         }
       } catch (error) {
         console.error('Error deleting site:', error);
+        toast({ title: 'An error occurred', variant: 'error' });
       } finally {
         setLoading(false);
       }
@@ -575,10 +638,10 @@ export default function SitesPage() {
       if (data.contacts?.length > 0) {
         const converted = data.contacts.map((c: any) => ({
           ...(c.id && { id: undefined }),
-          contactPerson: c.contactPerson,
-          designation: c.designation,
-          contactNumber: c.contactNumber,
-          emailAddress: c.emailAddress,
+          contactPerson: c.contactPerson || '',
+          designation: c.designation || '',
+          contactNumber: c.contactNumber || '',
+          emailAddress: c.emailAddress || '',
         }));
         setFormContacts(converted);
       }
@@ -598,6 +661,7 @@ export default function SitesPage() {
       state: '',
       pinCode: '',
       gstNo: '',
+      useCustomerData: false
     });
     setAddressBookSearch('');
     setShowAddressBookDropdown(false);
@@ -696,7 +760,7 @@ export default function SitesPage() {
               <div className="relative address-book-dropdown">
                 <Input
                   type="text"
-                  value={addressBookSearch}
+                  value={addressBookSearch || ''}
                   onChange={(e) => {
                     setAddressBookSearch(e.target.value);
 
@@ -820,7 +884,7 @@ export default function SitesPage() {
               <Label>Site/Branch Name <span className="text-red-500">*</span></Label>
               <Input
                 type="text"
-                value={formData.siteName}
+                value={formData.siteName || ''}
                 onChange={(e) => setFormData({ ...formData, siteName: e.target.value })}
                 required
               />
@@ -830,7 +894,7 @@ export default function SitesPage() {
             <div className="md:col-span-2 space-y-1.5">
               <Label>Site Address <span className="text-red-500">*</span></Label>
               <Textarea
-                value={formData.siteAddress}
+                value={formData.siteAddress || ''}
                 onChange={(e) => setFormData({ ...formData, siteAddress: e.target.value })}
                 rows={3}
                 required
@@ -842,7 +906,7 @@ export default function SitesPage() {
               <Label>Pin Code</Label>
               <Input
                 type="text"
-                value={formData.pinCode}
+                value={formData.pinCode || ''}
                 maxLength={6}
                 onChange={(e) => {
                   const value = e.target.value.replace(/\D/g, '');
@@ -856,7 +920,7 @@ export default function SitesPage() {
               <Label>GST Number</Label>
               <Input
                 type="text"
-                value={formData.gstNo}
+                value={formData.gstNo || ''}
                 onChange={(e) => setFormData({ ...formData, gstNo: e.target.value })}
               />
             </div>
@@ -866,7 +930,7 @@ export default function SitesPage() {
               <Label>City (filled automatically by pincode)</Label>
               <Input
                 type="text"
-                value={formData.city}
+                value={formData.city || ''}
                 onChange={(e) => setFormData({ ...formData, city: e.target.value })}
               />
             </div>
@@ -876,7 +940,7 @@ export default function SitesPage() {
               <Label>State (filled automatically by pincode)</Label>
               <Input
                 type="text"
-                value={formData.state}
+                value={formData.state || ''}
                 onChange={(e) => setFormData({ ...formData, state: e.target.value })}
               />
             </div>
@@ -920,7 +984,7 @@ export default function SitesPage() {
                     <Label>Contact Person <span className="text-red-500">*</span></Label>
                     <Input
                       type="text"
-                      value={contact.contactPerson}
+                      value={contact.contactPerson || ''}
                       onChange={(e) => updateContact(index, 'contactPerson', e.target.value)}
                       required
                     />
@@ -930,9 +994,8 @@ export default function SitesPage() {
                     <Label>Designation <span className="text-red-500">*</span></Label>
                     <Input
                       type="text"
-                      value={contact.designation}
+                      value={contact.designation || ''}
                       onChange={(e) => updateContact(index, 'designation', e.target.value)}
-                      required
                     />
                   </div>
 
@@ -940,9 +1003,8 @@ export default function SitesPage() {
                     <Label>Contact Number <span className="text-red-500">*</span></Label>
                     <Input
                       type="text"
-                      value={contact.contactNumber}
+                      value={contact.contactNumber || ''}
                       onChange={(e) => updateContact(index, 'contactNumber', e.target.value)}
-                      required
                     />
                   </div>
 
@@ -950,7 +1012,7 @@ export default function SitesPage() {
                     <Label>Email Address <span className="text-red-500">*</span></Label>
                     <Input
                       type="email"
-                      value={contact.emailAddress}
+                      value={contact.emailAddress || ''}
                       onChange={(e) => updateContact(index, 'emailAddress', e.target.value)}
                       required
                     />
@@ -1023,11 +1085,11 @@ export default function SitesPage() {
                 <TableRow key={item.id}>
                   <TableCell>
                     <Badge variant="secondary" className="font-mono text-xs">
-                      {item.siteID}
+                      {item.siteID || ''}
                     </Badge>
                   </TableCell>
-                  <TableCell className="font-medium">{item.siteName}</TableCell>
-                  <TableCell className="text-gray-600">{item.siteAddress}</TableCell>
+                  <TableCell className="font-medium">{item.siteName || ''}</TableCell>
+                  <TableCell className="text-gray-600">{item.siteAddress || ''}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       <Button

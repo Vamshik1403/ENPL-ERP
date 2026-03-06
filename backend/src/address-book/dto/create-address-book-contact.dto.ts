@@ -1,7 +1,8 @@
-import { IsInt, IsNotEmpty, IsString, IsEmail } from 'class-validator';
+import { IsInt, IsNotEmpty, IsString, IsEmail, IsOptional } from 'class-validator';
 
 export class CreateAddressBookContactDto {
   @IsInt()
+  @IsNotEmpty()
   addressBookId: number;
 
   @IsString()
@@ -9,13 +10,14 @@ export class CreateAddressBookContactDto {
   contactPerson: string;
 
   @IsString()
-  @IsNotEmpty()
-  designation: string;
+  @IsOptional()
+  designation?: string;
 
   @IsString()
   @IsNotEmpty()
   contactNumber: string;
 
   @IsEmail()
-  emailAddress: string;
+  @IsOptional()
+  emailAddress?: string;
 }

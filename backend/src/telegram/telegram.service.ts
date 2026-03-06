@@ -73,9 +73,8 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     return false;
   }
 
-  const frontendUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
-  const isProduction = process.env.NODE_ENV === 'production';
-
+  const frontendUrl = this.configService.get('FRONTEND_URL') || 'https://yourdomain.com';
+  
   let successCount = 0;
 
   for (const assignment of task.engineerAssignments) {
@@ -92,15 +91,12 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       `${frontendUrl}/tasks/view/${engineer.engineerId}/${task.taskID}`
     );
 
-    // FIRST MESSAGE - Task Details (without link)
-    const detailsMessage = `
+    // SINGLE MESSAGE with clean format
+    const message = `
 🔧 <b>New Task Assigned</b>
 
 👷 <b>Engineer:</b> ${engineer.firstName} ${engineer.lastName}
 🏢 <b>Department:</b> ${task.department?.departmentName || 'N/A'}
-
-📋 <b>Task ID:</b> <code>${task.taskID}</code>
-🆔 <b>Engineer Task ID:</b> ${task.engineerTaskId || 'N/A'}
 
 📝 <b>Title:</b> ${task.title || 'N/A'}
 📃 <b>Description:</b> ${(task.description || 'N/A').substring(0, 200)}
@@ -116,22 +112,14 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     }
 
 ⚡ <b>Priority:</b> ${assignment.priority || task.priority || 'Normal'}
-`;
 
-    // SECOND MESSAGE - Task Link only (for easy copying)
-    const linkMessage = `
 ━━━━━━━━━━━━━━━━━━━━━━
-📎 <b>TASK LINK (copy below):</b>
-
-<code>${taskUrl}</code>
-
-<i>Long press to copy the link, then paste in your browser</i>
+🔗 <b>Task Link:</b> <a href="${taskUrl}">Click here to open task</a>
 ━━━━━━━━━━━━━━━━━━━━━━
 `;
 
     try {
-      // Send first message - Task Details
-      const detailsRes = await fetch(
+      const res = await fetch(
         `https://api.telegram.org/bot${this.botToken}/sendMessage`,
         {
           method: 'POST',
@@ -140,58 +128,33 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           },
           body: JSON.stringify({
             chat_id: engineer.telegramChatId,
-            text: detailsMessage,
+            text: message,
             parse_mode: 'HTML',
-            disable_web_page_preview: true,
+            disable_web_page_preview: false,
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: '🔗 Open Task',
+                    url: taskUrl,
+                  }
+                ],
+              
+              ],
+            },
           }),
         },
       );
 
-      const detailsData = await detailsRes.json();
+      const data = await res.json();
 
-      if (detailsData.ok) {
-        this.logger.log(`✅ Task details sent to ${engineer.engineerId}`);
-        
-        // Send second message - Task Link
-        const linkRes = await fetch(
-          `https://api.telegram.org/bot${this.botToken}/sendMessage`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              chat_id: engineer.telegramChatId,
-              text: linkMessage,
-              parse_mode: 'HTML',
-              disable_web_page_preview: true,
-              // Optional: Add a button in production
-              ...(isProduction && {
-                reply_markup: {
-                  inline_keyboard: [
-                    [
-                      {
-                        text: '🔗 Open Task',
-                        url: taskUrl,
-                      },
-                    ],
-                  ],
-                },
-              }),
-            }),
-          },
+      if (data.ok) {
+        this.logger.log(
+          `✅ Telegram notification sent to ${engineer.engineerId}`,
         );
-
-        const linkData = await linkRes.json();
-
-        if (linkData.ok) {
-          this.logger.log(`✅ Task link sent to ${engineer.engineerId}`);
-          successCount++;
-        } else {
-          this.logger.error('Telegram API error (link message):', linkData);
-        }
+        successCount++;
       } else {
-        this.logger.error('Telegram API error (details message):', detailsData);
+        this.logger.error('Telegram API error:', data);
       }
     } catch (err) {
       this.logger.error('Telegram send error:', err);

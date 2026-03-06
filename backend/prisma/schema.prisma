@@ -32,9 +32,9 @@ model AddressBookContact {
   id            Int    @id @default(autoincrement())
   addressBookId Int
   contactPerson String
-  designation   String
+  designation   String?
   contactNumber String
-  emailAddress  String
+  emailAddress  String?
 
   addressBook AddressBook @relation(fields: [addressBookId], references: [id], onDelete: Cascade)
 }
@@ -63,9 +63,9 @@ model SiteContact {
   id            Int    @id @default(autoincrement())
   siteId        Int
   contactPerson String
-  designation   String
+  designation   String?
   contactNumber String
-  emailAddress  String
+  emailAddress  String?
   site          Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
 }
 

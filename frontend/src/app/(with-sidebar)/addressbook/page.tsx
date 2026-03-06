@@ -1,7 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Pencil, Trash2, Search, Users, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { 
+  Plus, Pencil, Trash2, Search, Users, Loader2, ChevronLeft, ChevronRight, 
+  Download, FileSpreadsheet 
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import SlideFormPanel from '@/components/ui/SlideFormPanel';
 import { useToast } from '@/components/ui/toaster';
+import * as XLSX from 'xlsx';
 
 interface AddressBook {
   id?: number;
@@ -23,16 +27,33 @@ interface AddressBook {
   city?: string;
   state?: string;
   pinCode?: string;
-  gstNo: string;
+  gstNo?: string;
 }
 
 interface AddressBookContact {
   id?: number;
   addressBookId: number;
   contactPerson: string;
-  designation: string;
+  designation?: string;
   contactNumber: string;
-  emailAddress: string;
+  emailAddress?: string;
+}
+
+interface AddressBookWithRelations extends AddressBook {
+  contacts?: AddressBookContact[];
+  sites?: Site[];
+}
+
+interface Site {
+  id: number;
+  addressBookId: number;
+  siteID?: string;
+  siteName: string;
+  siteAddress: string;
+  city?: string;
+  state?: string;
+  pinCode?: string;
+  gstNo?: string;
 }
 
 // Permission types
@@ -42,9 +63,11 @@ type PermissionsJson = Record<string, CrudPerm>;
 export default function AddressBookPage() {
   const { toast } = useToast();
   const [addressBooks, setAddressBooks] = useState<AddressBook[]>([]);
+  const [fullAddressBookData, setFullAddressBookData] = useState<AddressBookWithRelations[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [formData, setFormData] = useState<AddressBook>({
     addressType: 'Customer',
     addressBookID: '',
@@ -76,6 +99,7 @@ export default function AddressBookPage() {
   // Load data from backend on component mount
   useEffect(() => {
     fetchAddressBooks();
+    fetchFullAddressBookData();
     if (userId) {
       fetchUserPermissions(userId);
     }
@@ -122,50 +146,34 @@ export default function AddressBookPage() {
         console.log('Full permissions API response:', data);
         
         // EXTRACTION LOGIC FOR YOUR API STRUCTURE:
-        // Your API returns: { id: 1, userId: 1, permissions: { permissions: { CUSTOMERS: {...} } } }
         let permissionsData = null;
         
         if (data && data.permissions) {
-          // First level: data.permissions
-          console.log('data.permissions:', data.permissions);
-          
           if (data.permissions.permissions) {
-            // Second level: data.permissions.permissions
             permissionsData = data.permissions.permissions;
-            console.log('Extracted permissions from data.permissions.permissions:', permissionsData);
           } else {
-            // If permissions is directly the object
             permissionsData = data.permissions;
-            console.log('Extracted permissions from data.permissions:', permissionsData);
           }
         } else {
-          // If data is directly the permissions object
           permissionsData = data;
-          console.log('Using data directly as permissions:', permissionsData);
         }
         
         if (permissionsData) {
           setPermissions(permissionsData);
           console.log('CUSTOMERS permissions set to:', permissionsData.CUSTOMERS);
-          
-          // Store in localStorage for persistence
           localStorage.setItem('userPermissions', JSON.stringify(permissionsData));
         } else {
           console.error('No permissions data found in response');
-          // Set default permissions
           setPermissions({});
         }
       } else {
         console.error('Failed to fetch permissions:', response.status, response.statusText);
-        // Fallback to localStorage if API fails
         const stored = localStorage.getItem('userPermissions');
         if (stored) {
           try {
             const parsed = JSON.parse(stored);
-            console.log('Using stored permissions from localStorage:', parsed);
             setPermissions(parsed);
           } catch (e) {
-            console.error('Error parsing stored permissions:', e);
             setPermissions({});
           }
         } else {
@@ -174,15 +182,12 @@ export default function AddressBookPage() {
       }
     } catch (error) {
       console.error('Error fetching permissions:', error);
-      // Fallback to localStorage if API fails
       const stored = localStorage.getItem('userPermissions');
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
-          console.log('Error fallback - Using stored permissions:', parsed);
           setPermissions(parsed);
         } catch (e) {
-          console.error('Error parsing stored permissions:', e);
           setPermissions({});
         }
       } else {
@@ -191,19 +196,17 @@ export default function AddressBookPage() {
     }
   };
 
+  // PIN code auto-fill effect
   useEffect(() => {
     const pin = formData.pinCode;
-
-    if (!pin || pin.length !== 6) return; // Only lookup when 6 digits
+    if (!pin || pin.length !== 6) return;
 
     const fetchCityState = async () => {
       try {
         const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`);
         const data = await res.json();
-
         if (data[0].Status === "Success") {
           const office = data[0].PostOffice[0];
-
           setFormData(prev => ({
             ...prev,
             city: office.District,
@@ -223,10 +226,24 @@ export default function AddressBookPage() {
       const response = await fetch('http://localhost:8000/address-book');
       if (response.ok) {
         const data = await response.json();
-        setAddressBooks(data);
+        // Handle both paginated and non-paginated responses
+        setAddressBooks(data.data || data);
       }
     } catch (error) {
       console.error('Error fetching address books:', error);
+    }
+  };
+
+  const fetchFullAddressBookData = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/address-book');
+      if (response.ok) {
+        const data = await response.json();
+        // Handle both paginated and non-paginated responses
+        setFullAddressBookData(data.data || data);
+      }
+    } catch (error) {
+      console.error('Error fetching full address book data:', error);
     }
   };
 
@@ -234,7 +251,7 @@ export default function AddressBookPage() {
   const filteredAddressBooks = addressBooks.filter(item =>
     item.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.addressBookID.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.gstNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (item.gstNo && item.gstNo.toLowerCase().includes(searchTerm.toLowerCase())) ||
     item.regdAddress.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -261,8 +278,6 @@ export default function AddressBookPage() {
     delete: permissions?.CUSTOMERS?.delete ?? false,
   };
 
-  console.log('Current customersPerm:', customersPerm);
-
   const generateAddressBookId = async (addressType: string) => {
     try {
       const response = await fetch(`http://localhost:8000/address-book/next-id/${addressType}`);
@@ -271,23 +286,16 @@ export default function AddressBookPage() {
     } catch (error) {
       console.error('Error generating ID:', error);
       // Fallback to local generation
-      const customerCount = addressBooks.filter(ab => ab.addressType === 'Customer').length;
-      const vendorCount = addressBooks.filter(ab => ab.addressType === 'Vendor').length;
-
-      if (addressType === 'Customer') {
-        const nextNumber = String(customerCount + 1).padStart(3, '0');
-        return `CUS/${nextNumber}`;
-      } else if (addressType === 'Vendor') {
-        const nextNumber = String(vendorCount + 1).padStart(3, '0');
-        return `VEN/${nextNumber}`;
-      }
-      return '';
+      const count = addressBooks.filter(ab => ab.addressType === 'Customer').length;
+      const nextNumber = String(count + 1).padStart(4, '0');
+      const currentYear = new Date().getFullYear().toString();
+      return `ENPL/${currentYear}/${nextNumber}`;
     }
   };
 
   const addContact = () => {
     const newContact: AddressBookContact = {
-      addressBookId: 0, // Will be set when address book is created
+      addressBookId: editingId || 0,
       contactPerson: '',
       designation: '',
       contactNumber: '',
@@ -309,7 +317,6 @@ export default function AddressBookPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Check if user has create/edit permission - USING CUSTOMERS PERMISSIONS
     if ((!editingId && !customersPerm.create) || (editingId && !customersPerm.edit)) {
       toast({ title: 'You do not have permission to perform this action', variant: 'error' });
       return;
@@ -317,13 +324,9 @@ export default function AddressBookPage() {
     
     setLoading(true);
 
-    console.log('Form submission started:', { editingId, formData, formContacts });
-
     try {
       if (editingId) {
         // Update existing record
-        console.log('Updating existing record with ID:', editingId);
-        // Only send the fields that should be updated, excluding nested objects and addressBookID
         const updateData = {
           addressType: formData.addressType,
           customerName: formData.customerName,
@@ -334,110 +337,120 @@ export default function AddressBookPage() {
           gstNo: formData.gstNo,
         };
 
-        console.log('Update data being sent:', updateData);
-
         const response = await fetch(`http://localhost:8000/address-book/${editingId}`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updateData),
         });
 
-        console.log('Update response status:', response.status);
-
         if (response.ok) {
-          console.log('Record updated successfully');
-
-          // Handle contacts separately with better error handling
-          try {
-            for (const contact of formContacts) {
-              if (contact.contactPerson.trim() && contact.designation.trim() && contact.contactNumber.trim() && contact.emailAddress.trim()) {
-                if (contact.id) {
-                  // Update existing contact
-                  console.log('Updating existing contact:', contact.id);
-                  const contactResponse = await fetch(`http://localhost:8000/address-book/contacts/${contact.id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      contactPerson: contact.contactPerson,
-                      designation: contact.designation,
-                      contactNumber: contact.contactNumber,
-                      emailAddress: contact.emailAddress,
-                    }),
-                  });
-
-                  if (!contactResponse.ok) {
-                    console.error('Failed to update contact:', contact.id, contactResponse.status);
-                  }
-                } else {
-                  // Create new contact
-                  console.log('Creating new contact for address book:', editingId);
-                  const contactResponse = await fetch('http://localhost:8000/addressbookcontact', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      ...contact,
-                      addressBookId: editingId,
-                    }),
-                  });
-
-                  if (!contactResponse.ok) {
-                    console.error('Failed to create contact:', contactResponse.status);
-                  }
-                }
-              }
-            }
-          } catch (contactError) {
-            console.error('Error handling contacts:', contactError);
-            // Don't fail the entire update if contacts fail
+          // STEP 1: Fetch existing contacts from backend to compare
+          const existingContactsResponse = await fetch(`http://localhost:8000/address-book/${editingId}/contacts`);
+          let existingContacts: AddressBookContact[] = [];
+          
+          if (existingContactsResponse.ok) {
+            const contactsData = await existingContactsResponse.json();
+            existingContacts = contactsData.data || contactsData;
           }
 
-          await fetchAddressBooks(); // Refresh the list
+          // STEP 2: Find contacts to delete (exist in backend but not in form)
+          const formContactIds = formContacts
+            .filter(c => c.id) // Only contacts that have an ID (already exist)
+            .map(c => c.id);
+          
+          const contactsToDelete = existingContacts.filter(
+            existing => !formContactIds.includes(existing.id)
+          );
+
+          // STEP 3: Delete removed contacts
+          for (const contact of contactsToDelete) {
+            if (contact.id) {
+              console.log('Deleting contact:', contact.id);
+              await fetch(`http://localhost:8000/address-book/contacts/${contact.id}`, {
+                method: 'DELETE',
+              });
+            }
+          }
+
+          // STEP 4: Update existing contacts and create new ones
+          for (const contact of formContacts) {
+            if (contact.contactPerson.trim() && contact.contactNumber.trim()) {
+              if (contact.id) {
+                // Update existing contact
+                await fetch(`http://localhost:8000/address-book/contacts/${contact.id}`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    contactPerson: contact.contactPerson,
+                    designation: contact.designation || null,
+                    contactNumber: contact.contactNumber,
+                    emailAddress: contact.emailAddress || null,
+                  }),
+                });
+              } else {
+                // Create new contact
+                await fetch(`http://localhost:8000/address-book/${editingId}/contacts`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    contactPerson: contact.contactPerson,
+                    designation: contact.designation || null,
+                    contactNumber: contact.contactNumber,
+                    emailAddress: contact.emailAddress || null,
+                  }),
+                });
+              }
+            }
+          }
+
+          toast({ title: 'Customer updated successfully', variant: 'success' });
+          await fetchAddressBooks();
+          await fetchFullAddressBookData();
           setShowForm(false);
           setEditingId(null);
           resetForm();
-          console.log('Form reset and closed');
         } else {
-          console.error('Failed to update record:', response.status, response.statusText);
+          toast({ title: 'Failed to update customer', variant: 'error' });
         }
       } else {
-        // Create new record
-        console.log('Creating new record');
+        // Create new record (no deletion needed for new records)
         const response = await fetch('http://localhost:8000/address-book', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData),
         });
 
         if (response.ok) {
           const newAddressBook = await response.json();
 
-          // Create contacts for this address book
+          // Create contacts
           for (const contact of formContacts) {
-            if (contact.contactPerson.trim() && contact.designation.trim() && contact.contactNumber.trim() && contact.emailAddress.trim()) {
-              await fetch('http://localhost:8000/addressbookcontact', {
+            if (contact.contactPerson.trim() && contact.contactNumber.trim()) {
+              await fetch(`http://localhost:8000/address-book/${newAddressBook.id}/contacts`, {
                 method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  ...contact,
-                  addressBookId: newAddressBook.id,
+                  contactPerson: contact.contactPerson,
+                  designation: contact.designation || null,
+                  contactNumber: contact.contactNumber,
+                  emailAddress: contact.emailAddress || null,
                 }),
               });
             }
           }
 
-          await fetchAddressBooks(); // Refresh the list
+          toast({ title: 'Customer created successfully', variant: 'success' });
+          await fetchAddressBooks();
+          await fetchFullAddressBookData();
           setShowForm(false);
           resetForm();
+        } else {
+          toast({ title: 'Failed to create customer', variant: 'error' });
         }
       }
     } catch (error) {
       console.error('Error saving address book:', error);
+      toast({ title: 'An error occurred', variant: 'error' });
     } finally {
       setLoading(false);
     }
@@ -459,7 +472,6 @@ export default function AddressBookPage() {
   };
 
   const handleEdit = async (id: number) => {
-    // Check edit permission - USING CUSTOMERS PERMISSION
     if (!customersPerm.edit) {
       toast({ title: 'You do not have permission to edit customers', variant: 'error' });
       return;
@@ -472,12 +484,14 @@ export default function AddressBookPage() {
       setEditingId(id);
       setShowForm(true);
 
-      // Fetch existing contacts for this address book
+      // Fetch existing contacts
       try {
         const response = await fetch(`http://localhost:8000/address-book/${id}/contacts`);
         if (response.ok) {
           const contactsData = await response.json();
-          setFormContacts(contactsData);
+          // Handle both paginated and non-paginated responses
+          setFormContacts(contactsData.data || contactsData);
+          console.log('Fetched contacts:', contactsData.data || contactsData);
         } else {
           setFormContacts([]);
         }
@@ -489,7 +503,6 @@ export default function AddressBookPage() {
   };
 
   const handleDelete = async (id: number) => {
-    // Check delete permission - USING CUSTOMERS PERMISSION
     if (!customersPerm.delete) {
       toast({ title: 'You do not have permission to delete customers', variant: 'error' });
       return;
@@ -502,10 +515,15 @@ export default function AddressBookPage() {
         });
 
         if (response.ok) {
-          await fetchAddressBooks(); // Refresh the list
+          toast({ title: 'Customer deleted successfully', variant: 'success' });
+          await fetchAddressBooks();
+          await fetchFullAddressBookData();
+        } else {
+          toast({ title: 'Failed to delete customer', variant: 'error' });
         }
       } catch (error) {
         console.error('Error deleting customer:', error);
+        toast({ title: 'An error occurred', variant: 'error' });
       }
     }
   };
@@ -514,6 +532,155 @@ export default function AddressBookPage() {
     setShowForm(false);
     setEditingId(null);
     resetForm();
+  };
+
+  // Download Excel functionality
+  const downloadExcel = () => {
+    try {
+      setDownloading(true);
+      
+      // Prepare data for Excel
+      const excelData = fullAddressBookData.map(item => {
+        // Format contacts as a string
+        const contactsList = item.contacts?.map(contact => 
+          `${contact.contactPerson}${contact.designation ? ` (${contact.designation})` : ''} - ${contact.contactNumber}${contact.emailAddress ? `, ${contact.emailAddress}` : ''}`
+        ).join('; ') || '';
+        
+        // Format sites as a string
+        const sitesList = item.sites?.map(site => 
+          `${site.siteName} - ${site.siteAddress}${site.city ? `, ${site.city}` : ''}${site.state ? `, ${site.state}` : ''}`
+        ).join('; ') || '';
+        
+        return {
+          'Customer ID': item.addressBookID,
+          'Customer Name': item.customerName,
+          'Registered Address': item.regdAddress,
+          'City': item.city || '',
+          'State': item.state || '',
+          'Pin Code': item.pinCode || '',
+          'GST No': item.gstNo || '',
+          'Contacts': contactsList,
+          'Sites/Branches': sitesList,
+          'Number of Contacts': item.contacts?.length || 0,
+          'Number of Sites': item.sites?.length || 0,
+        };
+      });
+
+      // Create worksheet
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      
+      // Set column widths
+      const colWidths = [
+        { wch: 20 }, // Customer ID
+        { wch: 30 }, // Customer Name
+        { wch: 40 }, // Registered Address
+        { wch: 20 }, // City
+        { wch: 20 }, // State
+        { wch: 15 }, // Pin Code
+        { wch: 20 }, // GST No
+        { wch: 50 }, // Contacts
+        { wch: 50 }, // Sites/Branches
+        { wch: 18 }, // Number of Contacts
+        { wch: 18 }, // Number of Sites
+      ];
+      ws['!cols'] = colWidths;
+
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Customers');
+      
+      // Generate filename with current date
+      const date = new Date();
+      const dateStr = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
+      const filename = `customers_${dateStr}.xlsx`;
+      
+      // Download file
+      XLSX.writeFile(wb, filename);
+      
+      toast({ 
+        title: 'Download successful', 
+        description: `Exported ${excelData.length} customers to Excel`, 
+        variant: 'success' 
+      });
+    } catch (error) {
+      console.error('Error downloading Excel:', error);
+      toast({ title: 'Failed to download Excel', variant: 'error' });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  // Download filtered data only
+  const downloadFilteredExcel = () => {
+    try {
+      setDownloading(true);
+      
+      // Get full data for filtered customers
+      const filteredIds = new Set(filteredAddressBooks.map(item => item.id));
+      const filteredFullData = fullAddressBookData.filter(item => 
+        item.id && filteredIds.has(item.id)
+      );
+      
+      // Prepare data for Excel
+      const excelData = filteredFullData.map(item => {
+        const contactsList = item.contacts?.map(contact => 
+          `${contact.contactPerson}${contact.designation ? ` (${contact.designation})` : ''} - ${contact.contactNumber}${contact.emailAddress ? `, ${contact.emailAddress}` : ''}`
+        ).join('; ') || '';
+        
+        const sitesList = item.sites?.map(site => 
+          `${site.siteName} - ${site.siteAddress}${site.city ? `, ${site.city}` : ''}${site.state ? `, ${site.state}` : ''}`
+        ).join('; ') || '';
+        
+        return {
+          'Customer ID': item.addressBookID,
+          'Customer Name': item.customerName,
+          'Registered Address': item.regdAddress,
+          'City': item.city || '',
+          'State': item.state || '',
+          'Pin Code': item.pinCode || '',
+          'GST No': item.gstNo || '',
+          'Contacts': contactsList,
+          'Sites/Branches': sitesList,
+          'Number of Contacts': item.contacts?.length || 0,
+          'Number of Sites': item.sites?.length || 0,
+        };
+      });
+
+      // Create worksheet
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      
+      // Set column widths
+      const colWidths = [
+        { wch: 20 }, { wch: 30 }, { wch: 40 }, { wch: 20 }, 
+        { wch: 20 }, { wch: 15 }, { wch: 20 }, { wch: 50 }, 
+        { wch: 50 }, { wch: 18 }, { wch: 18 }
+      ];
+      ws['!cols'] = colWidths;
+
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Filtered Customers');
+      
+      // Generate filename with search term
+      const date = new Date();
+      const dateStr = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
+      const searchSuffix = searchTerm ? `_${searchTerm.replace(/\s+/g, '_')}` : '';
+      const filename = `customers${searchSuffix}_${dateStr}.xlsx`;
+      
+      // Download file
+      XLSX.writeFile(wb, filename);
+      
+      toast({ 
+        title: 'Download successful', 
+        description: `Exported ${excelData.length} filtered customers to Excel`, 
+        variant: 'success' 
+      });
+    } catch (error) {
+      console.error('Error downloading filtered Excel:', error);
+      toast({ title: 'Failed to download Excel', variant: 'error' });
+    } finally {
+      setDownloading(false);
+    }
   };
 
   // Reset to first page when search term changes
@@ -531,33 +698,64 @@ export default function AddressBookPage() {
 
       {/* Toolbar */}
       <div className="mb-5 flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
-        <Button
-          onClick={async () => {
-            if (!customersPerm.create) {
-              toast({ title: 'You do not have permission to add new customers', variant: 'error' });
-              return;
-            }
-            setEditingId(null);
-            const genId = await generateAddressBookId('Customer');
-            setGeneratedId(genId);
-            setFormData({
-              addressType: 'Customer',
-              addressBookID: genId,
-              customerName: '',
-              regdAddress: '',
-              city: '',
-              state: '',
-              pinCode: '',
-              gstNo: '',
-            });
-            setShowForm(true);
-          }}
-          disabled={!customersPerm.create}
-          className="gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          Add Customer
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={async () => {
+              if (!customersPerm.create) {
+                toast({ title: 'You do not have permission to add new customers', variant: 'error' });
+                return;
+              }
+              setEditingId(null);
+              const genId = await generateAddressBookId('Customer');
+              setGeneratedId(genId);
+              setFormData({
+                addressType: 'Customer',
+                addressBookID: genId,
+                customerName: '',
+                regdAddress: '',
+                city: '',
+                state: '',
+                pinCode: '',
+                gstNo: '',
+              });
+              setShowForm(true);
+            }}
+            disabled={!customersPerm.create}
+            className="gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Add Customer
+          </Button>
+          
+          {/* Excel Download Buttons */}
+          <Button
+            variant="outline"
+            onClick={downloadExcel}
+            disabled={downloading || fullAddressBookData.length === 0}
+            className="gap-2 border-green-200 text-green-700 hover:bg-green-50 hover:text-green-800"
+            title="Download all customers to Excel"
+          >
+            {downloading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="w-4 h-4" />
+            )}
+            Export All
+          </Button>
+          
+          {searchTerm && filteredAddressBooks.length > 0 && (
+            <Button
+              variant="outline"
+              onClick={downloadFilteredExcel}
+              disabled={downloading}
+              className="gap-2 border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800"
+              title="Download filtered customers to Excel"
+            >
+              <Download className="w-4 h-4" />
+              Export Filtered
+            </Button>
+          )}
+        </div>
 
         {/* Search */}
         <div className="relative w-full sm:w-72">
@@ -596,7 +794,7 @@ export default function AddressBookPage() {
             <div className="md:col-span-2 space-y-1.5">
               <Label>Customer Name <span className="text-red-500">*</span></Label>
               <Input
-                value={formData.customerName}
+                value={formData.customerName || ''}
                 onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
                 required
                 placeholder="Enter customer name"
@@ -605,7 +803,7 @@ export default function AddressBookPage() {
             <div className="md:col-span-2 space-y-1.5">
               <Label>Registered Address <span className="text-red-500">*</span></Label>
               <Textarea
-                value={formData.regdAddress}
+                value={formData.regdAddress || ''}
                 onChange={(e) => setFormData({ ...formData, regdAddress: e.target.value })}
                 required
                 placeholder="Enter registered address"
@@ -614,7 +812,7 @@ export default function AddressBookPage() {
             <div className="space-y-1.5">
               <Label>Pin Code</Label>
               <Input
-                value={formData.pinCode}
+                value={formData.pinCode || ''}
                 maxLength={6}
                 onChange={(e) => {
                   const value = e.target.value.replace(/\D/g, '');
@@ -626,18 +824,18 @@ export default function AddressBookPage() {
             <div className="space-y-1.5">
               <Label>GST Number</Label>
               <Input
-                value={formData.gstNo}
+                value={formData.gstNo || ''}
                 onChange={(e) => setFormData({ ...formData, gstNo: e.target.value })}
                 placeholder="Enter GST number"
               />
             </div>
             <div className="space-y-1.5">
               <Label>City <span className="text-xs text-gray-400">(auto-filled by pincode)</span></Label>
-              <Input value={formData.city} readOnly className="bg-gray-50" />
+              <Input value={formData.city || ''} readOnly className="bg-gray-50" />
             </div>
             <div className="space-y-1.5">
               <Label>State <span className="text-xs text-gray-400">(auto-filled by pincode)</span></Label>
-              <Input value={formData.state} readOnly className="bg-gray-50" />
+              <Input value={formData.state || ''} readOnly className="bg-gray-50" />
             </div>
           </div>
 
@@ -665,34 +863,38 @@ export default function AddressBookPage() {
                   <div className="space-y-1">
                     <Label className="text-xs">Contact Person <span className="text-red-500">*</span></Label>
                     <Input
-                      value={contact.contactPerson}
+                      value={contact.contactPerson || ''}
                       onChange={(e) => updateContact(index, 'contactPerson', e.target.value)}
                       className="h-8 text-sm"
+                      required
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Designation <span className="text-red-500">*</span></Label>
+                    <Label className="text-xs">Designation</Label>
                     <Input
-                      value={contact.designation}
+                      value={contact.designation || ''}
                       onChange={(e) => updateContact(index, 'designation', e.target.value)}
                       className="h-8 text-sm"
+                      placeholder="Optional"
                     />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Contact Number <span className="text-red-500">*</span></Label>
                     <Input
-                      value={contact.contactNumber}
+                      value={contact.contactNumber || ''}
                       onChange={(e) => updateContact(index, 'contactNumber', e.target.value)}
                       className="h-8 text-sm"
+                      required
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Email Address <span className="text-red-500">*</span></Label>
+                    <Label className="text-xs">Email Address</Label>
                     <Input
                       type="email"
-                      value={contact.emailAddress}
+                      value={contact.emailAddress || ''}
                       onChange={(e) => updateContact(index, 'emailAddress', e.target.value)}
                       className="h-8 text-sm"
+                      placeholder="Optional"
                     />
                   </div>
                 </div>

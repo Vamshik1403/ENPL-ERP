@@ -1,36 +1,54 @@
-import { Controller, Get, Post, Put, Delete, Param, Body } from '@nestjs/common';
+import { 
+  Controller, 
+  Get, 
+  Post, 
+  Put, 
+  Delete, 
+  Param, 
+  Body, 
+  Query,
+  ParseIntPipe 
+} from '@nestjs/common';
 import { AddressBookService } from './address-book.service';
 import { CreateAddressBookDto } from './dto/create-address-book.dto';
 import { UpdateAddressBookDto } from './dto/update-address-book.dto';
-import { AddressBookContact } from '@prisma/client';
+
+import { ContactSearchDto } from './dto/contact-search.dto';
+import { PaginationDto } from './dto/pagination.dto';
+import { CreateAddressBookContactDto } from './dto/create-address-book-contact.dto';
+import { UpdateAddressBookContactDto } from './dto/update-address-book-contact.dto';
 
 @Controller('address-book')
 export class AddressBookController {
   constructor(private readonly service: AddressBookService) {}
 
+  // Address Book Endpoints
   @Post()
   create(@Body() dto: CreateAddressBookDto) {
     return this.service.create(dto);
   }
 
   @Get()
-  findAll() {
-    return this.service.findAll();
+  findAll(@Query() pagination: PaginationDto) {
+    return this.service.findAll(pagination);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.service.findOne(Number(id));
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.service.findOne(id);
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateAddressBookDto) {
-    return this.service.update(Number(id), dto);
+  update(
+    @Param('id', ParseIntPipe) id: number, 
+    @Body() dto: UpdateAddressBookDto
+  ) {
+    return this.service.update(id, dto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.service.remove(Number(id));
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.service.remove(id);
   }
 
   @Get('next-id/:addressType')
@@ -39,29 +57,43 @@ export class AddressBookController {
     return { nextId };
   }
 
-  // Contact management endpoints
+  // Contact Management Endpoints (nested under address-book)
   @Get(':id/contacts')
-  async findContacts(@Param('id') id: string): Promise<AddressBookContact[]> {
-    return this.service.findContacts(Number(id));
+  async findContacts(
+    @Param('id', ParseIntPipe) id: number,
+    @Query() pagination: PaginationDto
+  ) {
+    return this.service.findContacts(id, pagination);
+  }
+
+  @Get('contacts/search')
+  async searchContacts(@Query() searchDto: ContactSearchDto) {
+    return this.service.searchContacts(searchDto);
   }
 
   @Post(':id/contacts')
-  async addContact(@Param('id') id: string, @Body() data: Omit<AddressBookContact, 'id' | 'addressBookId'>): Promise<AddressBookContact> {
-    return this.service.addContact(Number(id), data);
-  }
-
-  @Put('contacts/:contactId')
-  async updateContact(@Param('contactId') contactId: string, @Body() data: Partial<AddressBookContact>): Promise<AddressBookContact> {
-    return this.service.updateContact(Number(contactId), data);
-  }
-
-  @Delete('contacts/:contactId')
-  async removeContact(@Param('contactId') contactId: string): Promise<AddressBookContact> {
-    return this.service.removeContact(Number(contactId));
+  async addContact(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() data: Omit<CreateAddressBookContactDto, 'addressBookId'>
+  ) {
+    return this.service.addContact(id, data);
   }
 
   @Get('contacts/:contactId')
-  async findOneContact(@Param('contactId') contactId: string): Promise<AddressBookContact | null> {
-    return this.service.findOneContact(Number(contactId));
+  async findOneContact(@Param('contactId', ParseIntPipe) contactId: number) {
+    return this.service.findOneContact(contactId);
+  }
+
+  @Put('contacts/:contactId')
+  async updateContact(
+    @Param('contactId', ParseIntPipe) contactId: number,
+    @Body() data: UpdateAddressBookContactDto
+  ) {
+    return this.service.updateContact(contactId, data);
+  }
+
+  @Delete('contacts/:contactId')
+  async removeContact(@Param('contactId', ParseIntPipe) contactId: number) {
+    return this.service.removeContact(contactId);
   }
 }

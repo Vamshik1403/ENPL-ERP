@@ -1,111 +1,241 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAddressBookDto } from './dto/create-address-book.dto';
 import { UpdateAddressBookDto } from './dto/update-address-book.dto';
-import { Prisma, AddressBook, AddressBookContact } from '@prisma/client';
+import { UpdateAddressBookContactDto } from './dto/update-address-book-contact.dto';
+import { ContactSearchDto } from './dto/contact-search.dto';
+import { AddressBook, AddressBookContact, Prisma } from '@prisma/client';
+import { CreateAddressBookContactDto } from './dto/create-address-book-contact.dto';
 
 @Injectable()
 export class AddressBookService {
   constructor(private prisma: PrismaService) {}
 
+  // Address Book Methods
   async create(data: CreateAddressBookDto): Promise<AddressBook> {
-    // Generate the proper sequential ID for Customer
     const addressBookID = await this.generateNextId('Customer');
     
     return this.prisma.addressBook.create({ 
       data: {
         ...data,
-        addressType: 'Customer', // Always set to Customer
+        addressType: 'Customer',
         addressBookID,
-      }
-    });
-  } 
-
- async generateNextId(addressType: string): Promise<string> {
-  const prefix = 'ENPL';
-  
-  try {
-    // Get current year
-    const currentYear = new Date().getFullYear().toString();
-    
-    // Count existing Customer records
-    const count = await this.prisma.addressBook.count({
-      where: { 
-        addressType,
-        // Optional: Add year filter if you want year-specific sequences
-        // createdAt: {
-        //   gte: new Date(`${currentYear}-01-01`),
-        //   lt: new Date(`${parseInt(currentYear) + 1}-01-01`)
-        // }
-      }
-    });
-    
-    // Generate 4-digit sequential number
-    const nextNumber = String(count + 1).padStart(4, '0');
-    
-    return `${prefix}/${currentYear}/${nextNumber}`;
-  } catch (error) {
-    console.error('Error generating next ID:', error);
-    throw new Error('Failed to generate customer ID');
-  }
-}
-
-  findAll(): Promise<AddressBook[]> {
-    return this.prisma.addressBook.findMany({
-      include: { contacts: true, sites: true, tasks: true },
+      } as Prisma.AddressBookCreateInput
     });
   }
 
-  findOne(id: number): Promise<AddressBook | null> {
-    return this.prisma.addressBook.findUnique({
+  async findAll(pagination: { page?: number; limit?: number } = {}): Promise<{ data: AddressBook[]; total: number }> {
+    const { page = 1, limit = 10 } = pagination;
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.prisma.addressBook.findMany({
+        skip,
+        take: limit,
+        include: { 
+          contacts: true, 
+          sites: true, 
+          tasks: true 
+        },
+        orderBy: { id: 'desc' },
+      }),
+      this.prisma.addressBook.count(),
+    ]);
+
+    return { data, total };
+  }
+
+  async findOne(id: number): Promise<AddressBook> {
+    const addressBook = await this.prisma.addressBook.findUnique({
       where: { id },
-      include: { contacts: true, sites: true, tasks: true },
-    });
-  }
-
-  update(id: number, data: UpdateAddressBookDto): Promise<AddressBook> {
-    return this.prisma.addressBook.update({
-      where: { id },
-      data,
-    });
-  }
-
-  remove(id: number): Promise<AddressBook> {
-    return this.prisma.addressBook.delete({ where: { id } });
-  }
-
-  // Contact management methods
-  async findContacts(addressBookId: number): Promise<AddressBookContact[]> {
-    return this.prisma.addressBookContact.findMany({
-      where: { addressBookId },
-    });
-  }
-
-  async addContact(addressBookId: number, data: Omit<AddressBookContact, 'id' | 'addressBookId'>): Promise<AddressBookContact> {
-    return this.prisma.addressBookContact.create({
-      data: {
-        ...data,
-        addressBookId,
+      include: { 
+        contacts: true, 
+        sites: true, 
+        tasks: true 
       },
     });
+
+    if (!addressBook) {
+      throw new NotFoundException(`Address book with ID ${id} not found`);
+    }
+
+    return addressBook;
   }
 
-  async updateContact(contactId: number, data: Partial<AddressBookContact>): Promise<AddressBookContact> {
-    return this.prisma.addressBookContact.update({
-      where: { id: contactId },
-      data,
+  async update(id: number, data: UpdateAddressBookDto): Promise<AddressBook> {
+    try {
+      return await this.prisma.addressBook.update({
+        where: { id },
+        data: data as Prisma.AddressBookUpdateInput,
+      });
+    } catch (error) {
+      if (error.code === 'P2025') {
+        throw new NotFoundException(`Address book with ID ${id} not found`);
+      }
+      throw error;
+    }
+  }
+
+  async remove(id: number): Promise<AddressBook> {
+    try {
+      return await this.prisma.addressBook.delete({ where: { id } });
+    } catch (error) {
+      if (error.code === 'P2025') {
+        throw new NotFoundException(`Address book with ID ${id} not found`);
+      }
+      throw error;
+    }
+  }
+
+  async generateNextId(addressType: string): Promise<string> {
+    const prefix = 'ENPL';
+    
+    try {
+      const currentYear = new Date().getFullYear().toString();
+      
+      const count = await this.prisma.addressBook.count({
+        where: { addressType }
+      });
+      
+      const nextNumber = String(count + 1).padStart(4, '0');
+      return `${prefix}/${currentYear}/${nextNumber}`;
+    } catch (error) {
+      console.error('Error generating next ID:', error);
+      throw new Error('Failed to generate customer ID');
+    }
+  }
+
+  // Contact Management Methods
+  async findContacts(
+    addressBookId: number, 
+    pagination: { page?: number; limit?: number } = {}
+  ): Promise<{ data: AddressBookContact[]; total: number }> {
+    const { page = 1, limit = 10 } = pagination;
+    const skip = (page - 1) * limit;
+
+    // Verify address book exists
+    await this.findOne(addressBookId);
+
+    const [data, total] = await Promise.all([
+      this.prisma.addressBookContact.findMany({
+        where: { addressBookId },
+        skip,
+        take: limit,
+        orderBy: { id: 'desc' },
+      }),
+      this.prisma.addressBookContact.count({ where: { addressBookId } }),
+    ]);
+
+    return { data, total };
+  }
+
+  async addContact(
+    addressBookId: number, 
+    data: Omit<CreateAddressBookContactDto, 'addressBookId'>
+  ): Promise<AddressBookContact> {
+    // Verify address book exists
+    await this.findOne(addressBookId);
+
+    // Create contact data with required fields
+    const contactData: Prisma.AddressBookContactCreateInput = {
+      contactPerson: data.contactPerson,
+      contactNumber: data.contactNumber,
+      designation: data.designation,
+      emailAddress: data.emailAddress,
+      addressBook: {
+        connect: { id: addressBookId }
+      }
+    };
+
+    return this.prisma.addressBookContact.create({
+      data: contactData,
     });
+  }
+
+  async updateContact(
+    contactId: number, 
+    data: UpdateAddressBookContactDto
+  ): Promise<AddressBookContact> {
+    try {
+      // Remove addressBookId from update data if present
+      const { addressBookId, ...updateData } = data as any;
+      
+      return await this.prisma.addressBookContact.update({
+        where: { id: contactId },
+        data: updateData as Prisma.AddressBookContactUpdateInput,
+      });
+    } catch (error) {
+      if (error.code === 'P2025') {
+        throw new NotFoundException(`Contact with ID ${contactId} not found`);
+      }
+      throw error;
+    }
   }
 
   async removeContact(contactId: number): Promise<AddressBookContact> {
-    return this.prisma.addressBookContact.delete({
-      where: { id: contactId },
-    });
+    try {
+      return await this.prisma.addressBookContact.delete({
+        where: { id: contactId },
+      });
+    } catch (error) {
+      if (error.code === 'P2025') {
+        throw new NotFoundException(`Contact with ID ${contactId} not found`);
+      }
+      throw error;
+    }
   }
 
-  async findOneContact(contactId: number): Promise<AddressBookContact | null> {
-    return this.prisma.addressBookContact.findUnique({
+  async findOneContact(contactId: number): Promise<AddressBookContact> {
+    const contact = await this.prisma.addressBookContact.findUnique({
       where: { id: contactId },
+      include: { addressBook: true },
     });
+
+    if (!contact) {
+      throw new NotFoundException(`Contact with ID ${contactId} not found`);
+    }
+
+    return contact;
+  }
+
+  async searchContacts(searchDto: ContactSearchDto): Promise<{ data: AddressBookContact[]; total: number }> {
+    const { query, addressBookId, email, contactNumber, page = 1, limit = 10 } = searchDto;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.AddressBookContactWhereInput = {};
+
+    if (addressBookId) {
+      where.addressBookId = addressBookId;
+    }
+
+    if (email) {
+      where.emailAddress = { contains: email, mode: 'insensitive' };
+    }
+
+    if (contactNumber) {
+      where.contactNumber = { contains: contactNumber };
+    }
+
+    if (query) {
+      where.OR = [
+        { contactPerson: { contains: query, mode: 'insensitive' } },
+        { designation: { contains: query, mode: 'insensitive' } },
+        { contactNumber: { contains: query, mode: 'insensitive' } },
+        { emailAddress: { contains: query, mode: 'insensitive' } },
+      ];
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.addressBookContact.findMany({
+        where,
+        skip,
+        take: limit,
+        include: { addressBook: true },
+        orderBy: { id: 'desc' },
+      }),
+      this.prisma.addressBookContact.count({ where }),
+    ]);
+
+    return { data, total };
   }
 }

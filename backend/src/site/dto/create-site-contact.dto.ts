@@ -6,7 +6,7 @@ export class CreateSiteContactDto {
   contactPerson: string;
 
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   designation: string;
 
   @IsString()
@@ -14,6 +14,6 @@ export class CreateSiteContactDto {
   contactNumber: string;
 
   @IsEmail()
-  @IsNotEmpty()
+  @IsOptional()
   emailAddress: string;
 }
