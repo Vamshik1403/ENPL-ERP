@@ -56,6 +56,13 @@ interface Site {
   gstNo?: string;
 }
 
+interface PaginatedResponse {
+  data: AddressBookWithRelations[];
+  total: number;
+  page?: number;
+  limit?: number;
+}
+
 // Permission types
 type CrudPerm = { read: boolean; create: boolean; edit: boolean; delete: boolean };
 type PermissionsJson = Record<string, CrudPerm>;
@@ -64,6 +71,7 @@ export default function AddressBookPage() {
   const { toast } = useToast();
   const [addressBooks, setAddressBooks] = useState<AddressBook[]>([]);
   const [fullAddressBookData, setFullAddressBookData] = useState<AddressBookWithRelations[]>([]);
+  const [totalRecords, setTotalRecords] = useState(0);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -103,7 +111,7 @@ export default function AddressBookPage() {
     if (userId) {
       fetchUserPermissions(userId);
     }
-  }, [userId]);
+  }, [userId, currentPage]); // Add currentPage to dependencies
 
   // Fetch user permissions with dynamic userId
   const fetchUserPermissions = async (userId: number) => {
@@ -223,43 +231,64 @@ export default function AddressBookPage() {
 
   const fetchAddressBooks = async () => {
     try {
-      const response = await fetch('http://localhost:8000/address-book');
+      setLoading(true);
+      // Add pagination parameters to the API call
+      const response = await fetch(`http://localhost:8000/address-book?page=${currentPage}&limit=${itemsPerPage}`);
       if (response.ok) {
         const data = await response.json();
-        // Handle both paginated and non-paginated responses
-        setAddressBooks(data.data || data);
+        // Handle paginated response
+        if (data.data && Array.isArray(data.data)) {
+          setAddressBooks(data.data);
+          setTotalRecords(data.total);
+        } else if (Array.isArray(data)) {
+          // Fallback for non-paginated response
+          setAddressBooks(data);
+          setTotalRecords(data.length);
+        } else {
+          setAddressBooks([]);
+          setTotalRecords(0);
+        }
       }
     } catch (error) {
       console.error('Error fetching address books:', error);
+      setAddressBooks([]);
+      setTotalRecords(0);
+    } finally {
+      setLoading(false);
     }
   };
 
   const fetchFullAddressBookData = async () => {
     try {
-      const response = await fetch('http://localhost:8000/address-book');
+      // For Excel export, we need to fetch ALL data (without pagination)
+      // You might need a separate endpoint for this, or fetch multiple pages
+      const response = await fetch('http://localhost:8000/address-book?limit=1000'); // Fetch more records
       if (response.ok) {
         const data = await response.json();
-        // Handle both paginated and non-paginated responses
-        setFullAddressBookData(data.data || data);
+        // Handle paginated response
+        if (data.data && Array.isArray(data.data)) {
+          setFullAddressBookData(data.data);
+        } else if (Array.isArray(data)) {
+          setFullAddressBookData(data);
+        } else {
+          setFullAddressBookData([]);
+        }
       }
     } catch (error) {
       console.error('Error fetching full address book data:', error);
     }
   };
 
-  // Filter address books based on search term
+  // Filter address books based on search term (client-side filtering)
   const filteredAddressBooks = addressBooks.filter(item =>
-    item.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.addressBookID.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.addressBookID?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (item.gstNo && item.gstNo.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    item.regdAddress.toLowerCase().includes(searchTerm.toLowerCase())
+    item.regdAddress?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Pagination calculations
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = filteredAddressBooks.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredAddressBooks.length / itemsPerPage);
+  // Pagination calculations - now using server-side pagination
+  const totalPages = Math.ceil(totalRecords / itemsPerPage);
 
   // Pagination controls
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
@@ -698,7 +727,7 @@ export default function AddressBookPage() {
 
       {/* Toolbar */}
       <div className="mb-5 flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button
             onClick={async () => {
               if (!customersPerm.create) {
@@ -740,7 +769,7 @@ export default function AddressBookPage() {
             ) : (
               <FileSpreadsheet className="w-4 h-4" />
             )}
-            Export All
+            Export All ({fullAddressBookData.length})
           </Button>
           
           {searchTerm && filteredAddressBooks.length > 0 && (
@@ -752,7 +781,7 @@ export default function AddressBookPage() {
               title="Download filtered customers to Excel"
             >
               <Download className="w-4 h-4" />
-              Export Filtered
+              Export Filtered ({filteredAddressBooks.length})
             </Button>
           )}
         </div>
@@ -938,8 +967,8 @@ export default function AddressBookPage() {
         <div className="px-5 py-3.5 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <h2 className="text-sm font-semibold text-gray-900">All Customers</h2>
           <span className="text-xs text-gray-500">
-            Showing {currentItems.length} of {filteredAddressBooks.length} entries
-            {searchTerm && ` (filtered from ${addressBooks.length} total)`}
+            Showing {addressBooks.length} of {totalRecords} entries
+            {searchTerm && ` (filtered to ${filteredAddressBooks.length})`}
           </span>
         </div>
 
@@ -954,7 +983,7 @@ export default function AddressBookPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {currentItems.map((item) => (
+              {filteredAddressBooks.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell>
                     <Badge variant="secondary" className="font-mono text-xs">{item.addressBookID}</Badge>
@@ -990,7 +1019,7 @@ export default function AddressBookPage() {
             </TableBody>
           </Table>
 
-          {currentItems.length === 0 && (
+          {filteredAddressBooks.length === 0 && (
             <div className="text-center py-12 text-gray-400">
               <Search className="w-10 h-10 mx-auto mb-3 text-gray-300" />
               <p className="text-sm font-medium text-gray-500">No customers found</p>
@@ -1005,23 +1034,15 @@ export default function AddressBookPage() {
         {totalPages > 1 && (
           <div className="px-5 py-3 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3">
             <span className="text-xs text-gray-500">
-              Page {currentPage} of {totalPages} &bull; {filteredAddressBooks.length} entries
+              Page {currentPage} of {totalPages} &bull; {totalRecords} total records
             </span>
             <div className="flex items-center gap-1.5">
               <Button variant="outline" size="sm" onClick={prevPage} disabled={currentPage === 1} className="h-8 w-8 p-0">
                 <ChevronLeft className="w-4 h-4" />
               </Button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                <Button
-                  key={page}
-                  variant={currentPage === page ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => paginate(page)}
-                  className="h-8 w-8 p-0 text-xs"
-                >
-                  {page}
-                </Button>
-              ))}
+              <span className="text-sm px-2">
+                {currentPage} / {totalPages}
+              </span>
               <Button variant="outline" size="sm" onClick={nextPage} disabled={currentPage === totalPages} className="h-8 w-8 p-0">
                 <ChevronRight className="w-4 h-4" />
               </Button>

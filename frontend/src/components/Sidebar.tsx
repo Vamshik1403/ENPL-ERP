@@ -128,7 +128,7 @@ const mainNavigationItems: NavigationItem[] = [
         permissionKey: 'VENDORS'
       },
       { 
-        name: 'Customer Registration', 
+        name: 'Customer Self Portal', 
         href: '/customer-registration', 
         icon: <User2 {...iconProps} />,
         permissionKey: 'CUSTOMER_REGISTRATION'

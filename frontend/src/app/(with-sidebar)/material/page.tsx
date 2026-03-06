@@ -105,24 +105,57 @@ export default function MaterialPage() {
     try {
       setLoading(true);
       const [custRes, vendRes, prodRes, invRes, delRes] = await Promise.all([
-        fetch('http://localhost:8000/address-book'), fetch('http://localhost:8000/vendors'),
-        fetch('http://localhost:8000/products'), fetch('http://localhost:8000/inventory'), fetch(DELIVERY_API),
+        fetch('http://localhost:8000/address-book'), 
+        fetch('http://localhost:8000/vendors'),
+        fetch('http://localhost:8000/products'), 
+        fetch('http://localhost:8000/inventory'), 
+        fetch(DELIVERY_API),
       ]);
-      setCustomers(await custRes.json());
-      setVendors(await vendRes.json());
-      setProducts(await prodRes.json());
+      
+      // Handle paginated response for customers
+      const custData = await custRes.json();
+      const customersArray = custData.data || custData;
+      setCustomers(Array.isArray(customersArray) ? customersArray : []);
+      
+      // Vendors - assuming returns array directly
+      const vendData = await vendRes.json();
+      setVendors(Array.isArray(vendData) ? vendData : []);
+      
+      // Products - assuming returns array directly
+      const prodData = await prodRes.json();
+      setProducts(Array.isArray(prodData) ? prodData : []);
+      
+      // Handle inventory data
       const invData = await invRes.json();
-      const flat = (invData || []).flatMap((inv: any) => (inv.products || []).map((p: any) => ({ id: p.id, serialNumber: p.serialNumber, macAddress: p.macAddress, productId: p.productId, product: p.product, vendorId: inv.vendorId })));
-      setInventory(flat); setInventoryList(flat);
+      const invArray = Array.isArray(invData) ? invData : (invData.data || []);
+      const flat = (invArray || []).flatMap((inv: any) => (inv.products || []).map((p: any) => ({ 
+        id: p.id, 
+        serialNumber: p.serialNumber, 
+        macAddress: p.macAddress, 
+        productId: p.productId, 
+        product: p.product, 
+        vendorId: inv.vendorId 
+      })));
+      setInventory(flat); 
+      setInventoryList(flat);
+      
+      // Handle delivery data
       const delData = await delRes.json();
       setDeliveryList(Array.isArray(delData) ? delData.reverse() : []);
-    } catch { /* */ } finally { setLoading(false); }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   useEffect(() => { if (!loadingPerms && perms.read) fetchAll(); }, [loadingPerms, perms.read]);
 
   useEffect(() => {
-    const sel = customers.find(c => c.id === formData.customerId);
+    // SAFE: Check if customers is array before using find
+    const sel = Array.isArray(customers) 
+      ? customers.find(c => c.id === formData.customerId) 
+      : undefined;
     setSites(sel?.sites || []);
     setFormData(prev => ({ ...prev, siteId: undefined }));
   }, [formData.customerId, customers]);
@@ -158,12 +191,28 @@ export default function MaterialPage() {
     if (!deliveryList.length) return;
     const allSites: Site[] = customers.flatMap(c => c.sites || []);
     const csv = Papa.unparse(deliveryList.map(d => ({
-      DeliveryType: d.deliveryType || 'N/A', RefNumber: d.refNumber || 'N/A', SalesOrderNo: d.salesOrderNo || 'N/A',
-      QuotationNo: d.quotationNo || 'N/A', PurchaseInvoiceNo: d.purchaseInvoiceNo || 'N/A', DeliveryChallan: d.deliveryChallan || 'N/A',
-      Customer: customers.find(c => c.id === d.customerId)?.customerName || 'N/A',
-      Site: allSites.find(s => s.id === d.siteId)?.siteName || 'N/A',
-      Vendor: vendors.find(v => v.id === d.vendorId)?.vendorName || 'N/A',
-      Products: (d.materialDeliveryItems || []).map((i: any) => { const inv = inventory.find(iv => iv.id === i.inventoryId); return `${products.find(p => p.id === i.productId)?.productName || inv?.product?.productName || 'N/A'} (SN:${inv?.serialNumber || i.serialNumber || 'N/A'}, MAC:${inv?.macAddress || i.macAddress || 'N/A'})`; }).join('; '),
+      DeliveryType: d.deliveryType || 'N/A', 
+      RefNumber: d.refNumber || 'N/A', 
+      SalesOrderNo: d.salesOrderNo || 'N/A',
+      QuotationNo: d.quotationNo || 'N/A', 
+      PurchaseInvoiceNo: d.purchaseInvoiceNo || 'N/A', 
+      DeliveryChallan: d.deliveryChallan || 'N/A',
+      // SAFE: Check if customers is array before using find
+      Customer: Array.isArray(customers) 
+        ? customers.find(c => c.id === d.customerId)?.customerName || 'N/A'
+        : 'N/A',
+      // SAFE: Check if allSites is array before using find
+      Site: Array.isArray(allSites) 
+        ? allSites.find(s => s.id === d.siteId)?.siteName || 'N/A'
+        : 'N/A',
+      // SAFE: Check if vendors is array before using find
+      Vendor: Array.isArray(vendors) 
+        ? vendors.find(v => v.id === d.vendorId)?.vendorName || 'N/A'
+        : 'N/A',
+      Products: (d.materialDeliveryItems || []).map((i: any) => { 
+        const inv = inventory.find(iv => iv.id === i.inventoryId); 
+        return `${Array.isArray(products) && products.find(p => p.id === i.productId)?.productName || inv?.product?.productName || 'N/A'} (SN:${inv?.serialNumber || i.serialNumber || 'N/A'}, MAC:${inv?.macAddress || i.macAddress || 'N/A'})`; 
+      }).join('; '),
     })));
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `material_deliveries_${new Date().toISOString().split('T')[0]}.csv`;
@@ -196,15 +245,48 @@ export default function MaterialPage() {
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
   };
 
-  const handleItemChange = (idx: number, field: keyof DeliveryItem, value: string) => {
-    const u = [...items]; (u[idx][field] as string) = value;
-    if (field === 'serialNumber' || field === 'macAddress') {
-      const found = inventory.find(inv => inv.serialNumber === u[idx].serialNumber || inv.macAddress === u[idx].macAddress);
-      if (found) { u[idx].productId = found.productId; u[idx].inventoryId = found.id; u[idx].serialNumber = found.serialNumber; u[idx].macAddress = found.macAddress; u[idx].productName = found.product?.productName || 'Unknown'; u[idx].vendorId = found.vendorId; u[idx].customerId = formData.customerId || 0; u[idx].siteId = formData.siteId || 0; }
+ // Update the handleItemChange function to properly handle selections
+const handleItemChange = (idx: number, field: keyof DeliveryItem, value: string) => {
+  const u = [...items]; 
+  
+  if (field === 'serialNumber' || field === 'macAddress') {
+    // When typing in the input
+    u[idx][field] = value;
+    
+    // Try to find matching inventory item
+    const found = inventory.find(inv => 
+      inv.serialNumber === value || inv.macAddress === value
+    );
+    
+    if (found) { 
+      u[idx].productId = found.productId; 
+      u[idx].inventoryId = found.id; 
+      u[idx].serialNumber = found.serialNumber; 
+      u[idx].macAddress = found.macAddress; 
+      u[idx].productName = found.product?.productName || 'Unknown'; 
+      u[idx].vendorId = found.vendorId; 
+      u[idx].customerId = formData.customerId || 0; 
+      u[idx].siteId = formData.siteId || 0; 
     }
-    setItems(u);
-    if (itemErrors[idx]?.[field]) { setItemErrors(prev => { const n = { ...prev }; if (n[idx]) { n[idx] = { ...n[idx] }; delete n[idx][field]; if (!Object.keys(n[idx]).length) delete n[idx]; } return n; }); }
-  };
+  } else {
+(u[idx] as any)[field] = value;  }
+  
+  setItems(u);
+  
+  // Clear errors for this field if any
+  if (itemErrors[idx]?.[field]) { 
+    setItemErrors(prev => { 
+      const n = { ...prev }; 
+      if (n[idx]) { 
+        n[idx] = { ...n[idx] }; 
+        delete n[idx][field]; 
+        if (!Object.keys(n[idx]).length) delete n[idx]; 
+      } 
+      return n; 
+    }); 
+  }
+};
+
 
   const addItem = () => setItems(prev => [...prev, { ...blankItem }]);
   const removeItem = (idx: number) => { if (items.length <= 1) return; setItems(prev => prev.filter((_, i) => i !== idx)); };
@@ -219,32 +301,92 @@ export default function MaterialPage() {
         customerId: isSaleOrDemo ? formData.customerId : undefined,
         siteId: formData.siteId || undefined,
         vendorId: isPurchaseReturn ? formData.vendorId : undefined,
-        materialDeliveryItems: items.filter(i => i.inventoryId).map(i => ({ inventoryId: i.inventoryId, serialNumber: i.serialNumber, macAddress: i.macAddress, productId: i.productId, productName: i.productName || 'Unknown' })),
+        materialDeliveryItems: items.filter(i => i.inventoryId).map(i => ({ 
+          inventoryId: i.inventoryId, 
+          serialNumber: i.serialNumber, 
+          macAddress: i.macAddress, 
+          productId: i.productId, 
+          productName: i.productName || 'Unknown' 
+        })),
       };
       const url = formData.id ? `${DELIVERY_API}/${formData.id}` : DELIVERY_API;
       const method = formData.id ? 'PUT' : 'POST';
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      if (!res.ok) { const err = await res.json().catch(() => null); toast({ title: 'Save failed', description: err?.message || 'Failed to save delivery', variant: 'error' }); return; }
-      await fetchAll(); resetForm();
-    } catch { toast({ title: 'Error saving delivery', variant: 'error' }); } finally { setSaving(false); }
+      if (!res.ok) { 
+        const err = await res.json().catch(() => null); 
+        toast({ title: 'Save failed', description: err?.message || 'Failed to save delivery', variant: 'error' }); 
+        return; 
+      }
+      await fetchAll(); 
+      resetForm();
+    } catch { 
+      toast({ title: 'Error saving delivery', variant: 'error' }); 
+    } finally { 
+      setSaving(false); 
+    }
   };
 
-  const openEdit = (d: any) => {
-    if (!perms.edit) return;
-    const enriched = (d.materialDeliveryItems || []).map((it: any) => {
-      const inv = inventory.find(i => i.id === it.inventoryId);
-      return { inventoryId: it.inventoryId || 0, serialNumber: it.serialNumber || inv?.serialNumber || '', macAddress: it.macAddress || inv?.macAddress || '', productId: it.productId || inv?.productId || 0, productName: inv?.product?.productName || 'Unknown', vendorId: d.vendorId || inv?.vendorId || undefined, customerId: d.customerId || undefined, siteId: d.siteId || undefined };
-    });
-    setFormData({ id: d.id, deliveryType: d.deliveryType || '', refNumber: d.refNumber || '', salesOrderNo: d.salesOrderNo || '', quotationNo: d.quotationNo || '', purchaseInvoiceNo: d.purchaseInvoiceNo || '', customerId: d.customerId || 0, siteId: d.siteId || 0, vendorId: d.vendorId || 0 });
-    setItems(enriched.length ? enriched : [{ ...blankItem }]);
-    setErrors({}); setItemErrors({});
-    setShowPanel(true);
+ const openEdit = (d: any) => {
+  if (!perms.edit) return;
+  
+  const enriched = (d.materialDeliveryItems || []).map((it: any) => {
+    const inv = inventory.find(i => i.id === it.inventoryId);
+    
+    // Use the values from the delivery item first, then fall back to inventory
+    return { 
+      inventoryId: it.inventoryId || 0, 
+      serialNumber: it.serialNumber || inv?.serialNumber || '', 
+      macAddress: it.macAddress || inv?.macAddress || '', 
+      productId: it.productId || inv?.productId || 0, 
+      productName: inv?.product?.productName || 'Unknown', 
+      vendorId: d.vendorId || inv?.vendorId || undefined, 
+      customerId: d.customerId || undefined, 
+      siteId: d.siteId || undefined 
+    };
+  });
+  
+  setFormData({ 
+    id: d.id, 
+    deliveryType: d.deliveryType || '', 
+    refNumber: d.refNumber || '', 
+    salesOrderNo: d.salesOrderNo || '', 
+    quotationNo: d.quotationNo || '', 
+    purchaseInvoiceNo: d.purchaseInvoiceNo || '', 
+    customerId: d.customerId || 0, 
+    siteId: d.siteId || 0, 
+    vendorId: d.vendorId || 0 
+  });
+  
+  setItems(enriched.length ? enriched : [{ ...blankItem }]);
+  setErrors({}); 
+  setItemErrors({});
+  setShowPanel(true);
+};
+
+  const handleDelete = async (id: number) => { 
+    if (!perms.delete || !confirm('Delete this delivery?')) return; 
+    try { 
+      await fetch(`${DELIVERY_API}/${id}`, { method: 'DELETE' }); 
+      await fetchAll(); 
+      toast({ title: 'Delivery deleted', variant: 'success' }); 
+    } catch { 
+      toast({ title: 'Error deleting delivery', variant: 'error' }); 
+    } 
   };
 
-  const handleDelete = async (id: number) => { if (!perms.delete || !confirm('Delete this delivery?')) return; try { await fetch(`${DELIVERY_API}/${id}`, { method: 'DELETE' }); await fetchAll(); toast({ title: 'Delivery deleted', variant: 'success' }); } catch { toast({ title: 'Error deleting delivery', variant: 'error' }); } };
-
-  const resetForm = () => { setShowPanel(false); setFormData({ ...blankForm }); setItems([{ ...blankItem }]); setErrors({}); setItemErrors({}); };
-  const handleAddNew = () => { if (!perms.create) return; resetForm(); setShowPanel(true); };
+  const resetForm = () => { 
+    setShowPanel(false); 
+    setFormData({ ...blankForm }); 
+    setItems([{ ...blankItem }]); 
+    setErrors({}); 
+    setItemErrors({}); 
+  };
+  
+  const handleAddNew = () => { 
+    if (!perms.create) return; 
+    resetForm(); 
+    setShowPanel(true); 
+  };
 
   /* ── helpers ──────────────────────────────────────────── */
   const typeBadge = (t: string) => {
@@ -258,23 +400,60 @@ export default function MaterialPage() {
   };
 
   /* ── guards ───────────────────────────────────────────── */
-  if (loadingPerms) return (<div className="flex items-center justify-center min-h-[60vh]"><div className="text-center space-y-3"><Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto" /><p className="text-sm text-gray-500">Loading permissions…</p></div></div>);
-  if (!perms.read) return (<div className="flex items-center justify-center min-h-[60vh]"><div className="text-center p-8 bg-white rounded-xl border border-gray-200 shadow-sm max-w-md"><div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4"><ShieldX className="w-6 h-6 text-red-500" /></div><h3 className="text-lg font-semibold text-gray-900 mb-1">Access Denied</h3><p className="text-sm text-gray-500">You don&apos;t have permission to view material deliveries.</p></div></div>);
+  if (loadingPerms) return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="text-center space-y-3">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto" />
+        <p className="text-sm text-gray-500">Loading permissions…</p>
+      </div>
+    </div>
+  );
+  
+  if (!perms.read) return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="text-center p-8 bg-white rounded-xl border border-gray-200 shadow-sm max-w-md">
+        <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
+          <ShieldX className="w-6 h-6 text-red-500" />
+        </div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">Access Denied</h3>
+        <p className="text-sm text-gray-500">You don&apos;t have permission to view material deliveries.</p>
+      </div>
+    </div>
+  );
 
   return (
     <div className="p-6 space-y-6">
       {/* header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div><h1 className="text-xl font-semibold text-gray-900">Material Outward</h1><p className="text-sm text-gray-500 mt-0.5">Manage material delivery records</p></div>
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">Material Outward</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Manage material delivery records</p>
+        </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={handleCSV} className="gap-2" disabled={!deliveryList.length}><Download className="w-4 h-4" /> CSV</Button>
-          <Button onClick={handleAddNew} disabled={!perms.create} className="gap-2"><Plus className="w-4 h-4" /> Add Delivery</Button>
+          <Button variant="outline" onClick={handleCSV} className="gap-2" disabled={!deliveryList.length}>
+            <Download className="w-4 h-4" /> CSV
+          </Button>
+          <Button onClick={handleAddNew} disabled={!perms.create} className="gap-2">
+            <Plus className="w-4 h-4" /> Add Delivery
+          </Button>
         </div>
       </div>
+      
       <Separator />
+      
       <div className="flex items-center justify-between gap-4">
-        <div className="relative w-full max-w-sm"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /><Input placeholder="Search deliveries…" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} className="pl-9" /></div>
-        <Badge variant="secondary" className="shrink-0">{sorted.length} {sorted.length === 1 ? 'result' : 'results'}</Badge>
+        <div className="relative w-full max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Input 
+            placeholder="Search deliveries…" 
+            value={searchTerm} 
+            onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} 
+            className="pl-9" 
+          />
+        </div>
+        <Badge variant="secondary" className="shrink-0">
+          {sorted.length} {sorted.length === 1 ? 'result' : 'results'}
+        </Badge>
       </div>
 
       {/* table */}
@@ -284,15 +463,26 @@ export default function MaterialPage() {
             <TableHeader>
               <TableRow className="bg-gray-50/80">
                 {tableCols.map(c => (
-                  <TableHead key={c.key} className={`whitespace-nowrap text-xs ${c.sortable ? 'cursor-pointer select-none' : ''} ${c.key === 'actions' ? 'text-right' : ''}`} onClick={() => c.sortable && handleSort(c.key)}>
-                    <span className="inline-flex items-center">{c.label}{c.sortable && <SortIcon col={c.key} />}</span>
+                  <TableHead 
+                    key={c.key} 
+                    className={`whitespace-nowrap text-xs ${c.sortable ? 'cursor-pointer select-none' : ''} ${c.key === 'actions' ? 'text-right' : ''}`} 
+                    onClick={() => c.sortable && handleSort(c.key)}
+                  >
+                    <span className="inline-flex items-center">
+                      {c.label}
+                      {c.sortable && <SortIcon col={c.key} />}
+                    </span>
                   </TableHead>
                 ))}
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={tableCols.length} className="text-center py-12"><Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto" /></TableCell></TableRow>
+                <TableRow>
+                  <TableCell colSpan={tableCols.length} className="text-center py-12">
+                    <Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto" />
+                  </TableCell>
+                </TableRow>
               ) : paginated.length > 0 ? paginated.map(d => (
                 <TableRow key={d.id} className="hover:bg-gray-50/50 text-sm">
                   <TableCell>{typeBadge(d.deliveryType)}</TableCell>
@@ -307,42 +497,114 @@ export default function MaterialPage() {
                   <TableCell className="max-w-[180px]">
                     <div className="flex flex-col gap-0.5">
                       {d.materialDeliveryItems?.map((i: any, idx: number) => (
-                        <div key={idx} className="text-xs"><span className="font-medium">{i.product?.productName || 'N/A'}</span>{i.serialNumber && <span className="text-gray-500 ml-1">SN:{i.serialNumber}</span>}</div>
+                        <div key={idx} className="text-xs">
+                          <span className="font-medium">{i.product?.productName || 'N/A'}</span>
+                          {i.serialNumber && <span className="text-gray-500 ml-1">SN:{i.serialNumber}</span>}
+                        </div>
                       )) || <span className="text-gray-400 text-xs">No items</span>}
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(d)} disabled={!perms.edit} className="h-8 w-8"><Pencil className="w-3.5 h-3.5" /></Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(d.id)} disabled={!perms.delete} className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"><Trash2 className="w-3.5 h-3.5" /></Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => openEdit(d)} 
+                        disabled={!perms.edit} 
+                        className="h-8 w-8"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => handleDelete(d.id)} 
+                        disabled={!perms.delete} 
+                        className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
               )) : (
-                <TableRow><TableCell colSpan={tableCols.length} className="text-center py-12"><p className="text-sm text-gray-500">{searchTerm ? 'No deliveries match your search' : 'No deliveries yet'}</p>{!searchTerm && perms.create && <Button variant="outline" size="sm" onClick={handleAddNew} className="mt-3 gap-2"><Plus className="w-3.5 h-3.5" /> Add First Delivery</Button>}</TableCell></TableRow>
+                <TableRow>
+                  <TableCell colSpan={tableCols.length} className="text-center py-12">
+                    <p className="text-sm text-gray-500">
+                      {searchTerm ? 'No deliveries match your search' : 'No deliveries yet'}
+                    </p>
+                    {!searchTerm && perms.create && (
+                      <Button variant="outline" size="sm" onClick={handleAddNew} className="mt-3 gap-2">
+                        <Plus className="w-3.5 h-3.5" /> Add First Delivery
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
               )}
             </TableBody>
           </Table>
         </div>
+        
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50/50">
             <p className="text-sm text-gray-500">Page {currentPage} of {totalPages}</p>
             <div className="flex items-center gap-1">
-              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}><ChevronLeft className="w-4 h-4" /></Button>
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => { const s = Math.max(1, Math.min(currentPage - 2, totalPages - 4)); const pg = s + i; if (pg > totalPages) return null; return <Button key={pg} variant={currentPage === pg ? 'default' : 'outline'} size="icon" className="h-8 w-8" onClick={() => setCurrentPage(pg)}>{pg}</Button>; })}
-              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}><ChevronRight className="w-4 h-4" /></Button>
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className="h-8 w-8" 
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => { 
+                const s = Math.max(1, Math.min(currentPage - 2, totalPages - 4)); 
+                const pg = s + i; 
+                if (pg > totalPages) return null; 
+                return (
+                  <Button 
+                    key={pg} 
+                    variant={currentPage === pg ? 'default' : 'outline'} 
+                    size="icon" 
+                    className="h-8 w-8" 
+                    onClick={() => setCurrentPage(pg)}
+                  >
+                    {pg}
+                  </Button>
+                ); 
+              })}
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className="h-8 w-8" 
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
+                disabled={currentPage === totalPages}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
             </div>
           </div>
         )}
       </div>
 
       {/* slide panel form */}
-      <SlideFormPanel title={formData.id ? 'Edit Delivery' : 'Add Delivery'} description={formData.id ? 'Update material delivery details' : 'Record a new material delivery'} isOpen={showPanel} onClose={resetForm} >
+      <SlideFormPanel 
+        title={formData.id ? 'Edit Delivery' : 'Add Delivery'} 
+        description={formData.id ? 'Update material delivery details' : 'Record a new material delivery'} 
+        isOpen={showPanel} 
+        onClose={resetForm} 
+      >
         <form onSubmit={handleSave} className="p-6 space-y-5 overflow-y-auto max-h-[calc(100vh-120px)]">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Delivery Type <span className="text-red-500">*</span></Label>
-              <select name="deliveryType" value={formData.deliveryType} onChange={handleChange} className={`flex h-9 w-full rounded-md border ${errors.deliveryType ? 'border-red-500' : 'border-input'} bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring`}>
+              <select 
+                name="deliveryType" 
+                value={formData.deliveryType} 
+                onChange={handleChange} 
+                className={`flex h-9 w-full rounded-md border ${errors.deliveryType ? 'border-red-500' : 'border-input'} bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring`}
+              >
                 <option value="">Select Type</option>
                 <option value="Sale">Sale</option>
                 <option value="Demo">Demo</option>
@@ -350,21 +612,38 @@ export default function MaterialPage() {
               </select>
               {errors.deliveryType && <p className="text-xs text-red-600">{errors.deliveryType}</p>}
             </div>
-            <div className="space-y-2"><Label>Reference Number</Label><Input name="refNumber" value={formData.refNumber || ''} onChange={handleChange} placeholder="Reference #" /></div>
+            <div className="space-y-2">
+              <Label>Reference Number</Label>
+              <Input name="refNumber" value={formData.refNumber || ''} onChange={handleChange} placeholder="Reference #" />
+            </div>
 
             {isSaleOrDemo && (
               <>
                 <div className="space-y-2">
                   <Label>Customer <span className="text-red-500">*</span></Label>
-                  <CustomerCombobox selectedValue={formData.customerId ?? 0} onSelect={v => { setFormData(p => ({ ...p, customerId: v })); if (errors.customerId) setErrors(p => ({ ...p, customerId: '' })); }} placeholder="Select Customer" />
+                  <CustomerCombobox 
+                    selectedValue={formData.customerId ?? 0} 
+                    onSelect={v => { 
+                      setFormData(p => ({ ...p, customerId: v })); 
+                      if (errors.customerId) setErrors(p => ({ ...p, customerId: '' })); 
+                    }} 
+                    placeholder="Select Customer" 
+                  />
                   {errors.customerId && <p className="text-xs text-red-600">{errors.customerId}</p>}
                 </div>
                 {formData.customerId ? (
                   <div className="space-y-2">
                     <Label>Site <span className="text-red-500">*</span></Label>
-                    <select name="siteId" value={formData.siteId ?? ''} onChange={handleChange} className={`flex h-9 w-full rounded-md border ${errors.siteId ? 'border-red-500' : 'border-input'} bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring`}>
+                    <select 
+                      name="siteId" 
+                      value={formData.siteId ?? ''} 
+                      onChange={handleChange} 
+                      className={`flex h-9 w-full rounded-md border ${errors.siteId ? 'border-red-500' : 'border-input'} bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring`}
+                    >
                       <option value="">Select Site</option>
-                      {sites.map(s => <option key={s.id} value={s.id}>{s.siteName}</option>)}
+                      {Array.isArray(sites) && sites.map(s => (
+                        <option key={s.id} value={s.id}>{s.siteName}</option>
+                      ))}
                     </select>
                     {errors.siteId && <p className="text-xs text-red-600">{errors.siteId}</p>}
                   </div>
@@ -375,16 +654,32 @@ export default function MaterialPage() {
             {isPurchaseReturn && (
               <div className="space-y-2">
                 <Label>Vendor <span className="text-red-500">*</span></Label>
-                <VendorCombobox selectedValue={formData.vendorId ?? 0} onSelect={v => { setFormData(p => ({ ...p, vendorId: v })); if (errors.vendorId) setErrors(p => ({ ...p, vendorId: '' })); }} placeholder="Select Vendor" />
+                <VendorCombobox 
+                  selectedValue={formData.vendorId ?? 0} 
+                  onSelect={v => { 
+                    setFormData(p => ({ ...p, vendorId: v })); 
+                    if (errors.vendorId) setErrors(p => ({ ...p, vendorId: '' })); 
+                  }} 
+                  placeholder="Select Vendor" 
+                />
                 {errors.vendorId && <p className="text-xs text-red-600">{errors.vendorId}</p>}
               </div>
             )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2"><Label>Sales Order No</Label><Input name="salesOrderNo" value={formData.salesOrderNo || ''} onChange={handleChange} disabled={formData.deliveryType !== 'Sale'} className={formData.deliveryType !== 'Sale' ? 'bg-gray-50' : ''} /></div>
-            <div className="space-y-2"><Label>Quotation No</Label><Input name="quotationNo" value={formData.quotationNo || ''} onChange={handleChange} disabled={formData.deliveryType !== 'Demo'} className={formData.deliveryType !== 'Demo' ? 'bg-gray-50' : ''} /></div>
-            <div className="space-y-2"><Label>Purchase Invoice No</Label><Input name="purchaseInvoiceNo" value={formData.purchaseInvoiceNo || ''} onChange={handleChange} disabled={formData.deliveryType !== 'Purchase Return'} className={formData.deliveryType !== 'Purchase Return' ? 'bg-gray-50' : ''} /></div>
+            <div className="space-y-2">
+              <Label>Sales Order No</Label>
+              <Input name="salesOrderNo" value={formData.salesOrderNo || ''} onChange={handleChange} disabled={formData.deliveryType !== 'Sale'} className={formData.deliveryType !== 'Sale' ? 'bg-gray-50' : ''} />
+            </div>
+            <div className="space-y-2">
+              <Label>Quotation No</Label>
+              <Input name="quotationNo" value={formData.quotationNo || ''} onChange={handleChange} disabled={formData.deliveryType !== 'Demo'} className={formData.deliveryType !== 'Demo' ? 'bg-gray-50' : ''} />
+            </div>
+            <div className="space-y-2">
+              <Label>Purchase Invoice No</Label>
+              <Input name="purchaseInvoiceNo" value={formData.purchaseInvoiceNo || ''} onChange={handleChange} disabled={formData.deliveryType !== 'Purchase Return'} className={formData.deliveryType !== 'Purchase Return' ? 'bg-gray-50' : ''} />
+            </div>
           </div>
 
           <Separator />
@@ -393,28 +688,58 @@ export default function MaterialPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Label className="text-base">Items</Label>
-              <Button type="button" variant="outline" size="sm" onClick={addItem} className="gap-1"><Plus className="w-3.5 h-3.5" /> Add Item</Button>
+              <Button type="button" variant="outline" size="sm" onClick={addItem} className="gap-1">
+                <Plus className="w-3.5 h-3.5" /> Add Item
+              </Button>
             </div>
             {items.map((item, i) => (
               <div key={i} className="relative border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50/50">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs font-medium text-gray-500">Item {i + 1}</span>
-                  {items.length > 1 && <Button type="button" variant="ghost" size="icon" onClick={() => removeItem(i)} className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50"><X className="w-3.5 h-3.5" /></Button>}
+                  {items.length > 1 && (
+                    <Button type="button" variant="ghost" size="icon" onClick={() => removeItem(i)} className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50">
+                      <X className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <Label className="text-xs">Serial Number</Label>
-                    <SerialCombobox selectedValue={item.inventoryId || 0} onSelect={v => { const inv = inventoryList.find(x => x.id === v); if (inv) { const u = [...items]; u[i] = { ...u[i], serialNumber: inv.serialNumber, macAddress: inv.macAddress, productId: inv.productId, inventoryId: inv.id }; setItems(u); } }} onInputChange={v => handleItemChange(i, 'serialNumber', v)} placeholder="Select Serial" />
+                    <SerialCombobox 
+                      selectedValue={item.inventoryId || 0} 
+                      onSelect={v => { 
+                        const inv = inventoryList.find(x => x.id === v); 
+                        if (inv) { 
+                          const u = [...items]; 
+                          u[i] = { ...u[i], serialNumber: inv.serialNumber, macAddress: inv.macAddress, productId: inv.productId, inventoryId: inv.id }; 
+                          setItems(u); 
+                        } 
+                      }} 
+                      onInputChange={v => handleItemChange(i, 'serialNumber', v)} 
+                      placeholder="Select Serial" 
+                    />
                     {itemErrors[i]?.serialNumber && <p className="text-xs text-red-600">{itemErrors[i]?.serialNumber}</p>}
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">MAC Address</Label>
-                    <MacAddressCombobox selectedValue={inventoryList.find(x => x.macAddress === item.macAddress)?.id || 0} onSelect={v => { const inv = inventoryList.find(x => x.id === v); if (inv) { const u = [...items]; u[i] = { ...u[i], macAddress: inv.macAddress, serialNumber: inv.serialNumber, productId: inv.productId, inventoryId: inv.id }; setItems(u); } }} onInputChange={v => handleItemChange(i, 'macAddress', v)} placeholder="Select MAC" />
+                    <MacAddressCombobox 
+                      selectedValue={inventoryList.find(x => x.macAddress === item.macAddress)?.id || 0} 
+                      onSelect={v => { 
+                        const inv = inventoryList.find(x => x.id === v); 
+                        if (inv) { 
+                          const u = [...items]; 
+                          u[i] = { ...u[i], macAddress: inv.macAddress, serialNumber: inv.serialNumber, productId: inv.productId, inventoryId: inv.id }; 
+                          setItems(u); 
+                        } 
+                      }} 
+                      onInputChange={v => handleItemChange(i, 'macAddress', v)} 
+                      placeholder="Select MAC" 
+                    />
                     {itemErrors[i]?.macAddress && <p className="text-xs text-red-600">{itemErrors[i]?.macAddress}</p>}
                   </div>
                   <div className="space-y-1 md:col-span-2">
                     <Label className="text-xs">Product (auto-filled)</Label>
-                    <Input readOnly value={products.find(p => p.id === item.productId)?.productName || ''} className="bg-gray-50" />
+                    <Input readOnly value={Array.isArray(products) ? (products.find(p => p.id === item.productId)?.productName || '') : ''} className="bg-gray-50" />
                     {itemErrors[i]?.productId && <p className="text-xs text-red-600">{itemErrors[i]?.productId}</p>}
                   </div>
                 </div>
@@ -424,8 +749,16 @@ export default function MaterialPage() {
 
           <Separator />
           <div className="flex items-center gap-3">
-            <Button type="submit" className="flex-1" disabled={saving}>{saving ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />{formData.id ? 'Updating…' : 'Creating…'}</> : formData.id ? 'Update Delivery' : 'Create Delivery'}</Button>
-            <Button type="button" variant="outline" onClick={resetForm} className="flex-1" disabled={saving}>Cancel</Button>
+            <Button type="submit" className="flex-1" disabled={saving}>
+              {saving ? (
+                <><Loader2 className="w-4 h-4 animate-spin mr-2" />{formData.id ? 'Updating…' : 'Creating…'}</>
+              ) : (
+                formData.id ? 'Update Delivery' : 'Create Delivery'
+              )}
+            </Button>
+            <Button type="button" variant="outline" onClick={resetForm} className="flex-1" disabled={saving}>
+              Cancel
+            </Button>
           </div>
         </form>
       </SlideFormPanel>

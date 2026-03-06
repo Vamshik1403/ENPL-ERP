@@ -2348,10 +2348,12 @@ export default function TasksPage() {
     dept.departmentName.toLowerCase().includes(departmentSearch.toLowerCase())
   );
 
-  const filteredCustomers = addressBooks.filter(customer =>
-    customer.customerName.toLowerCase().includes(customerSearch.toLowerCase()) ||
-    (customer.addressBookID?.toLowerCase() || '').includes(customerSearch.toLowerCase())
-  );
+const filteredCustomers = Array.isArray(addressBooks) 
+  ? addressBooks.filter(customer =>
+      customer.customerName?.toLowerCase().includes(customerSearch.toLowerCase()) ||
+      (customer.addressBookID?.toLowerCase() || '').includes(customerSearch.toLowerCase())
+    )
+  : [];
 
   const filteredWorkscopeCategories = serviceWorkscopeCategories.filter(cat =>
     cat.workscopeCategoryName.toLowerCase().includes(workscopeCategorySearch.toLowerCase())
@@ -2522,16 +2524,18 @@ export default function TasksPage() {
   }, [loggedUser, departments]);
 
 
-  const fetchAddressBooks = async () => {
-    try {
-      const response = await fetch('http://localhost:8000/address-book');
-      const data = await response.json();
-      setAddressBooks(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Error fetching address books:', error);
-      setAddressBooks([]);
-    }
-  };
+const fetchAddressBooks = async () => {
+  try {
+    const response = await fetch('http://localhost:8000/address-book?limit=1000'); // Fetch more records for search
+    const data = await response.json();
+    // Handle paginated response
+    const addressBooksArray = data.data || data;
+    setAddressBooks(Array.isArray(addressBooksArray) ? addressBooksArray : []);
+  } catch (error) {
+    console.error('Error fetching address books:', error);
+    setAddressBooks([]);
+  }
+};
 
   const fetchSites = async () => {
     try {

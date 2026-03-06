@@ -158,18 +158,29 @@ export default function ServiceContractPage() {
   };
 
   /* ── data fetching ────────────────────────────────────── */
-  useEffect(() => {
-    (async () => {
-      try {
-        const [cust, cats, prods, tsk] = await Promise.all([
-          apiFetch('/address-book'), apiFetch('/contractworkcategory'),
-          apiFetch('/products'), apiFetch('/task'),
-        ]);
-        setCustomers(cust.filter((c: any) => c.addressType === 'Customer'));
-        setServiceCategories(cats); setProductTypes(prods); setTasks(tsk);
-      } catch { /* */ }
-    })();
-  }, []);
+useEffect(() => {
+  (async () => {
+    try {
+      const [cust, cats, prods, tsk] = await Promise.all([
+        apiFetch('/address-book?limit=1000'), // Fetch more records for search
+        apiFetch('/contractworkcategory'),
+        apiFetch('/products'), 
+        apiFetch('/task'),
+      ]);
+      
+      // Handle paginated response for customers
+      const customersArray = cust.data || cust;
+      const allCustomers = Array.isArray(customersArray) ? customersArray : [];
+      setCustomers(allCustomers.filter((c: any) => c.addressType === 'Customer'));
+      
+      setServiceCategories(cats); 
+      setProductTypes(prods); 
+      setTasks(tsk);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    }
+  })();
+}, []);
 
   useEffect(() => { if (customers.length > 0) { loadContracts(); } }, [customers]);
 
@@ -177,8 +188,8 @@ export default function ServiceContractPage() {
     try {
       setLoading(true);
       const contracts = await apiFetch('/service-contract');
-      const enhanced = await Promise.all(contracts.map(async (c: any) => {
-        const cust = customers.find((cu: any) => cu.id === c.customerId);
+const enhanced = await Promise.all(contracts.map(async (c: any) => {
+  const cust = Array.isArray(customers) ? customers.find((cu: any) => cu.id === c.customerId) : null;
         let branchName = 'N/A';
         if (cust && c.branchId) { const br = cust.sites?.find((s: any) => s.id === c.branchId); branchName = br?.siteName || 'N/A'; }
         let startDate = '', endDate = '';
@@ -198,11 +209,12 @@ export default function ServiceContractPage() {
   const paginated = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   /* ── customer select ──────────────────────────────────── */
-  const handleCustomerSelect = (cid: number) => {
-    const c = customers.find((cu: any) => cu.id === cid);
-    setFormData(p => ({ ...p, customerId: cid, branchId: 0 }));
-    setSites(c?.sites || []);
-  };
+const handleCustomerSelect = (cid: number) => {
+  // Safely find customer in array
+  const c = Array.isArray(customers) ? customers.find((cu: any) => cu.id === cid) : null;
+  setFormData(p => ({ ...p, customerId: cid, branchId: 0 }));
+  setSites(c?.sites || []);
+};
 
   /* ── add new ──────────────────────────────────────────── */
   const handleAddNew = async () => {
@@ -411,15 +423,47 @@ export default function ServiceContractPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="space-y-2"><Label>Contract ID</Label><Input value={formData.serviceContractID} readOnly className="bg-gray-50" /></div>
               <div className="space-y-2"><Label>Attachment</Label><input type="file" accept="image/*,.pdf" onChange={e => setAttachmentFile(e.target.files?.[0] || null)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm" />{!attachmentFile && editingId && formData.attachmentUrl && <a href={`http://localhost:8000${formData.attachmentUrl}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline">View current</a>}</div>
-              <div className="space-y-2 relative" onClick={e => e.stopPropagation()}>
-                <Label>Customer Name</Label>
-                <Input value={customerSearch || customers.find((c: any) => c.id === formData.customerId)?.customerName || ''} onChange={e => { setCustomerSearch(e.target.value); setShowCustomerSuggestions(true); setFilteredCustomers(e.target.value.trim() ? customers.filter((c: any) => c.customerName.toLowerCase().includes(e.target.value.toLowerCase())) : customers); }} onFocus={() => setShowCustomerSuggestions(true)} placeholder="Search customer…" />
-                {showCustomerSuggestions && filteredCustomers.length > 0 && (
-                  <ul className="absolute z-50 bg-white border border-gray-200 w-full max-h-48 overflow-y-auto rounded-lg shadow-lg mt-1">
-                    {filteredCustomers.map((c: any) => <li key={c.id} className="px-3 py-2 cursor-pointer hover:bg-gray-100 text-sm" onClick={() => { handleCustomerSelect(c.id); setCustomerSearch(c.customerName); setShowCustomerSuggestions(false); }}>{c.customerName}</li>)}
-                  </ul>
-                )}
-              </div>
+             <div className="space-y-2 relative" onClick={e => e.stopPropagation()}>
+  <Label>Customer Name</Label>
+  <Input 
+    value={
+      customerSearch || 
+      (Array.isArray(customers) && customers.find((c: any) => c.id === formData.customerId)?.customerName) || 
+      ''
+    } 
+    onChange={e => { 
+      setCustomerSearch(e.target.value); 
+      setShowCustomerSuggestions(true); 
+      if (e.target.value.trim()) {
+        const filtered = Array.isArray(customers) 
+          ? customers.filter((c: any) => 
+              c.customerName?.toLowerCase().includes(e.target.value.toLowerCase())
+            ) 
+          : [];
+        setFilteredCustomers(filtered);
+      } else {
+        setFilteredCustomers(Array.isArray(customers) ? customers : []);
+      }
+    }} 
+    onFocus={() => setShowCustomerSuggestions(true)} 
+    placeholder="Search customer…" 
+  />
+  {showCustomerSuggestions && Array.isArray(filteredCustomers) && filteredCustomers.length > 0 && (
+    <ul className="absolute z-50 bg-white border border-gray-200 w-full max-h-48 overflow-y-auto rounded-lg shadow-lg mt-1">
+      {filteredCustomers.map((c: any) => (
+        <li key={c.id} className="px-3 py-2 cursor-pointer hover:bg-gray-100 text-sm" 
+          onClick={() => { 
+            handleCustomerSelect(c.id); 
+            setCustomerSearch(c.customerName); 
+            setShowCustomerSuggestions(false); 
+          }}
+        >
+          {c.customerName}
+        </li>
+      ))}
+    </ul>
+  )}
+</div>
               <div className="space-y-2"><Label>Branch / Site <span className="text-red-500">*</span></Label><select value={formData.branchId || ''} onChange={e => setFormData(p => ({ ...p, branchId: parseInt(e.target.value) }))} className={selectCls} required><option value="">Select Site</option>{sites.map((s: any) => <option key={s.id} value={s.id}>{s.siteName}</option>)}</select></div>
               <div className="space-y-2"><Label>Sales Manager <span className="text-red-500">*</span></Label><Input value={formData.salesManagerName} onChange={e => setFormData(p => ({ ...p, salesManagerName: e.target.value }))} placeholder="Manager name" required /></div>
               <div className="space-y-2"><Label>AMC Type <span className="text-red-500">*</span></Label><select value={formData.amcType} onChange={e => setFormData(p => ({ ...p, amcType: e.target.value }))} className={selectCls} required><option value="" disabled>Select</option><option value="Comprehensive">Comprehensive</option><option value="Non-Comprehensive">Non-Comprehensive</option></select></div>
