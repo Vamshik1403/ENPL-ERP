@@ -67,8 +67,8 @@ export class CreateInventoryDto {
   status?: string;
 
   @IsOptional()
-  @IsNumber()
-  dueAmount?: number;
+  @IsString()
+  dueAmount?: string;
 
   @IsOptional()
   @IsString()

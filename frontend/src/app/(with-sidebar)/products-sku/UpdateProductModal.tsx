@@ -34,7 +34,7 @@ const UpdateProductModal: React.FC<UpdateProductModalProps> = ({
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const response = await axios.get("http://localhost:8000/category");
+        const response = await axios.get("https://enplerp.electrohelps.in/backend/category");
         setCategories(response.data);
       } catch (error) {
         console.error("Error fetching categories:", error);
@@ -55,7 +55,7 @@ const UpdateProductModal: React.FC<UpdateProductModalProps> = ({
       if (productId && show) {
         try {
           setFetching(true);
-          const response = await axios.get(`http://localhost:8000/products/${productId}`);
+          const response = await axios.get(`https://enplerp.electrohelps.in/backend/products/${productId}`);
           const productData = response.data;
           setProductName(productData.productName || "");
           setProductDescription(productData.productDescription || "");
@@ -133,7 +133,7 @@ const UpdateProductModal: React.FC<UpdateProductModalProps> = ({
         categoryId: parseInt(categoryId, 10),
         subCategoryId: parseInt(subCategoryId, 10),
       };
-      await axios.put(`http://localhost:8000/products/${productId}`, updatedProduct);
+      await axios.put(`https://enplerp.electrohelps.in/backend/products/${productId}`, updatedProduct);
       fetchProducts();
       toast({ title: "Product updated successfully!", variant: "success" });
       onHide();

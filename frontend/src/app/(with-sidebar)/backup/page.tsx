@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/table';
 import { useToast } from '@/components/ui/toaster';
 
-const API = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+const API = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://enplerp.electrohelps.in/backend';
 
 type Recurrence = 'HOUR' | 'DAY' | 'WEEK' | 'MONTH' | 'YEAR';
 type BackupConfig = {

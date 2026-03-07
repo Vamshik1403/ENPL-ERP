@@ -79,7 +79,7 @@ const ProductTable: React.FC = () => {
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const response = await axios.get("http://localhost:8000/products");
+      const response = await axios.get("https://enplerp.electrohelps.in/backend/products");
       setProducts(response.data.reverse());
     } catch (error) {
       console.error("Error fetching products:", error);
@@ -91,7 +91,7 @@ const ProductTable: React.FC = () => {
 
   const fetchCategories = async () => {
     try {
-      const response = await axios.get("http://localhost:8000/category");
+      const response = await axios.get("https://enplerp.electrohelps.in/backend/category");
       setCategories(response.data);
     } catch (error) {
       console.error("Error fetching categories:", error);
@@ -100,7 +100,7 @@ const ProductTable: React.FC = () => {
 
   const fetchSubCategories = async () => {
     try {
-      const response = await axios.get("http://localhost:8000/subcategory");
+      const response = await axios.get("https://enplerp.electrohelps.in/backend/subcategory");
       setSubCategories(response.data);
     } catch (error) {
       console.error("Error fetching subcategories:", error);
@@ -160,7 +160,7 @@ const ProductTable: React.FC = () => {
     setIsUpdateOpen(true);
 
     // Fetch fresh product data
-    axios.get(`http://localhost:8000/products/${product.id}`)
+    axios.get(`https://enplerp.electrohelps.in/backend/products/${product.id}`)
       .then((response) => {
         const productData = response.data;
         setUpdateForm({
@@ -192,7 +192,7 @@ const ProductTable: React.FC = () => {
     if (!confirmDelete) return;
 
     try {
-      await axios.delete(`http://localhost:8000/products/${id}`);
+      await axios.delete(`https://enplerp.electrohelps.in/backend/products/${id}`);
       toast({ title: "Product deleted successfully!", variant: "success" });
       fetchProducts();
     } catch (error: any) {
@@ -312,7 +312,7 @@ const ProductTable: React.FC = () => {
         categoryId: parseInt(createForm.categoryId, 10),
         subCategoryId: parseInt(createForm.subCategoryId, 10),
       };
-      await axios.post("http://localhost:8000/products", newProduct);
+      await axios.post("https://enplerp.electrohelps.in/backend/products", newProduct);
       fetchProducts();
       toast({ title: "Product created successfully!", variant: "success" });
       resetCreateForm();
@@ -367,7 +367,7 @@ const ProductTable: React.FC = () => {
         categoryId: parseInt(updateForm.categoryId, 10),
         subCategoryId: parseInt(updateForm.subCategoryId, 10),
       };
-      await axios.put(`http://localhost:8000/products/${selectedProductId}`, updatedProduct);
+      await axios.put(`https://enplerp.electrohelps.in/backend/products/${selectedProductId}`, updatedProduct);
       fetchProducts();
       toast({ title: "Product updated successfully!", variant: "success" });
       setIsUpdateOpen(false);

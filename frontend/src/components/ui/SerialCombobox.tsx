@@ -44,7 +44,7 @@ export default function SerialNumberCombobox({
 React.useEffect(() => {
   async function fetchSerialNumbers() {
     try {
-      const res = await fetch("http://localhost:8000/inventory");
+      const res = await fetch("https://enplerp.electrohelps.in/backend/inventory");
       const data = await res.json();
 
       // Flatten all product serial numbers across inventory items

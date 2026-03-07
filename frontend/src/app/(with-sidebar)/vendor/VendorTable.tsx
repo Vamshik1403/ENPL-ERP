@@ -105,7 +105,7 @@ const VendorTable: React.FC = () => {
   const fetchVendors = async () => {
     try {
       setLoading(true);
-      const response = await axios.get("http://localhost:8000/vendors");
+      const response = await axios.get("https://enplerp.electrohelps.in/backend/vendors");
       setVendors(response.data.reverse());
     } catch (error) {
       console.error("Failed to fetch vendors:", error);
@@ -142,7 +142,7 @@ const VendorTable: React.FC = () => {
 
   const fetchCategories = async () => {
     try {
-      const response = await axios.get("http://localhost:8000/category");
+      const response = await axios.get("https://enplerp.electrohelps.in/backend/category");
       const names = response.data.map((c: any) => c.categoryName);
       setCategories(names);
     } catch (error) {
@@ -369,7 +369,7 @@ const VendorTable: React.FC = () => {
     if (!confirm) return;
 
     try {
-      await axios.delete(`http://localhost:8000/vendors/${id}`);
+      await axios.delete(`https://enplerp.electrohelps.in/backend/vendors/${id}`);
       toast({ title: "Vendor deleted successfully!", variant: "success" });
       fetchVendors();
     } catch (err: any) {
@@ -426,14 +426,14 @@ const VendorTable: React.FC = () => {
       let response;
       if (formData.id) {
         response = await axios.put(
-          `http://localhost:8000/vendors/${formData.id}`,
+          `https://enplerp.electrohelps.in/backend/vendors/${formData.id}`,
           payload,
           {
             headers: { "Content-Type": "multipart/form-data" },
           }
         );
       } else {
-        response = await axios.post("http://localhost:8000/vendors", payload, {
+        response = await axios.post("https://enplerp.electrohelps.in/backend/vendors", payload, {
           headers: { "Content-Type": "multipart/form-data" },
         });
       }
@@ -566,7 +566,7 @@ const VendorTable: React.FC = () => {
                         <TableCell>
                           {vendor.gstpdf ? (
                             <a
-                              href={`http://localhost:8000/gst/${vendor.gstpdf}`}
+                              href={`https://enplerp.electrohelps.in/backend/gst/${vendor.gstpdf}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-indigo-600 hover:text-indigo-800 hover:underline text-sm"
@@ -728,7 +728,7 @@ const VendorTable: React.FC = () => {
                   </p>
                   {selectedVendor.gstpdf && (
                     <a
-                      href={`http://localhost:8000/gst/${selectedVendor.gstpdf}`}
+                      href={`https://enplerp.electrohelps.in/backend/gst/${selectedVendor.gstpdf}`}
                       target="_blank"
                       rel="noopener noreferrer"
                     >
@@ -948,7 +948,7 @@ const VendorTable: React.FC = () => {
               <div className="mt-3">
                 <p className="text-sm text-gray-500 mb-1">Existing certificate:</p>
                 <a
-                  href={`http://localhost:8000/gst/${formData.gstpdf}`}
+                  href={`https://enplerp.electrohelps.in/backend/gst/${formData.gstpdf}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-indigo-600 hover:text-indigo-800 hover:underline text-sm"

@@ -52,7 +52,7 @@ export function useDashboardPermissions() {
         return;
       }
 
-      const response = await fetch(`http://localhost:8000/user-permissions/${userId}`, {
+      const response = await fetch(`https://enplerp.electrohelps.in/backend/user-permissions/${userId}`, {
         headers: { Authorization: `Bearer ${access_token}` },
       });
 

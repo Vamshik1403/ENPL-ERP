@@ -49,7 +49,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
-  const API_LOGIN = "http://localhost:8000/auth/login";
+  const API_LOGIN = "https://enplerp.electrohelps.in/backend/auth/login";
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -73,7 +73,7 @@ export default function LoginPage() {
       localStorage.setItem("access_token", data.access_token);
 
       // 🔥 FETCH USER DETAILS
-      const userRes = await fetch("http://localhost:8000/auth/users", {
+      const userRes = await fetch("https://enplerp.electrohelps.in/backend/auth/users", {
         headers: {
           Authorization: `Bearer ${data.access_token}`,
         },

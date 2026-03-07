@@ -29,8 +29,8 @@ const selectCls = 'flex h-9 w-full rounded-md border border-input bg-transparent
 
 export default function CustomerContactPage() {
   const { toast } = useToast();
-  const API = 'http://localhost:8000/customer-contact';
-  const PERMISSIONS_API = 'http://localhost:8000/user-permissions';
+  const API = 'https://enplerp.electrohelps.in/backend/customer-contact';
+  const PERMISSIONS_API = 'https://enplerp.electrohelps.in/backend/user-permissions';
 
   const [records, setRecords] = useState<CustomerContact[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -56,7 +56,7 @@ export default function CustomerContactPage() {
   };
   
   const fetchCustomers = async () => { 
-    const r = await fetch('http://localhost:8000/address-book'); 
+    const r = await fetch('https://enplerp.electrohelps.in/backend/address-book'); 
     const data = await r.json();
     // Handle paginated response
     const customersArray = data.data || data;
@@ -65,7 +65,7 @@ export default function CustomerContactPage() {
   
   const fetchSites = async (cid: number) => {
     if (!cid) { setSites([]); return; }
-    const r = await fetch(`http://localhost:8000/sites/based-on-cust?addressBookId=${cid}`);
+    const r = await fetch(`https://enplerp.electrohelps.in/backend/sites/based-on-cust?addressBookId=${cid}`);
     const d = await r.json(); 
     setSites(Array.isArray(d) ? d : []);
   };

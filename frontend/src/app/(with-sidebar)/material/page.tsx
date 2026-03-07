@@ -52,8 +52,8 @@ const tableCols: { label: string; key: string; sortable: boolean }[] = [
   { label: 'Actions', key: 'actions', sortable: false },
 ];
 
-const DELIVERY_API = 'http://localhost:8000/material-delivery';
-const PERM_API = 'http://localhost:8000/user-permissions';
+const DELIVERY_API = 'https://enplerp.electrohelps.in/backend/material-delivery';
+const PERM_API = 'https://enplerp.electrohelps.in/backend/user-permissions';
 
 export default function MaterialPage() {
   const { toast } = useToast();
@@ -87,17 +87,70 @@ export default function MaterialPage() {
   const isPurchaseReturn = formData.deliveryType === 'Purchase Return';
 
   /* ── perms ────────────────────────────────────────────── */
-  useEffect(() => { const id = localStorage.getItem('userId'); if (id) setUserId(Number(id)); }, []);
-  useEffect(() => { if (userId) fetchPerms(userId); }, [userId]);
+  useEffect(() => { 
+    const id = localStorage.getItem('userId'); 
+    if (id) setUserId(Number(id)); 
+  }, []);
+  
+  useEffect(() => { 
+    if (userId) fetchPerms(userId); 
+  }, [userId]);
+
   const fetchPerms = async (uid: number) => {
     try {
-      if (localStorage.getItem('userType') === 'SUPERADMIN') { setPerms({ read: true, create: true, edit: true, delete: true }); setLoadingPerms(false); return; }
-      const res = await fetch(`${PERM_API}/${uid}`);
-      if (!res.ok) throw new Error();
-      const raw = await res.text(); if (!raw) { setLoadingPerms(false); return; }
-      const p = JSON.parse(raw)?.permissions?.permissions ?? {};
-      setPerms(p.MATERIAL_DELIVERY ?? { read: false, create: false, edit: false, delete: false });
-    } catch { /* */ } finally { setLoadingPerms(false); }
+      setLoadingPerms(true);
+
+      // SUPERADMIN bypass
+      if (localStorage.getItem('userType') === 'SUPERADMIN') {
+        setPerms({ read: true, create: true, edit: true, delete: true });
+        setLoadingPerms(false);
+        return;
+      }
+
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token');
+      const res = await fetch(`${PERM_API}/${uid}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+
+      if (!res.ok) {
+        console.warn(`Permission API returned ${res.status}, granting limited access.`);
+        setPerms({ read: false, create: false, edit: false, delete: false });
+        setLoadingPerms(false);
+        return;
+      }
+
+      const data = await res.json();
+      console.log('Permissions API response:', data);
+
+      // Navigate the structure: data.permissions.permissions
+      let permissionsObj = null;
+      if (data?.permissions?.permissions) {
+        permissionsObj = data.permissions.permissions;
+        console.log('Extracted permissions object:', permissionsObj);
+      } else {
+        console.warn('Could not find permissions object in the expected structure.');
+        setPerms({ read: false, create: false, edit: false, delete: false });
+        setLoadingPerms(false);
+        return;
+      }
+
+      // Look for the correct key: "MATERIAL_OUTWARD"
+      const materialPerms = permissionsObj?.MATERIAL_OUTWARD;
+
+      if (materialPerms) {
+        console.log('MATERIAL_OUTWARD permissions found:', materialPerms);
+        setPerms(materialPerms);
+      } else {
+        console.warn('MATERIAL_OUTWARD permission key not found. Check the key name in your permissions object.');
+        setPerms({ read: false, create: false, edit: false, delete: false });
+      }
+
+    } catch (error) {
+      console.error('Permission fetch error:', error);
+      setPerms({ read: false, create: false, edit: false, delete: false });
+    } finally {
+      setLoadingPerms(false);
+    }
   };
 
   /* ── data fetching ────────────────────────────────────── */
@@ -105,10 +158,10 @@ export default function MaterialPage() {
     try {
       setLoading(true);
       const [custRes, vendRes, prodRes, invRes, delRes] = await Promise.all([
-        fetch('http://localhost:8000/address-book'), 
-        fetch('http://localhost:8000/vendors'),
-        fetch('http://localhost:8000/products'), 
-        fetch('http://localhost:8000/inventory'), 
+        fetch('https://enplerp.electrohelps.in/backend/address-book'), 
+        fetch('https://enplerp.electrohelps.in/backend/vendors'),
+        fetch('https://enplerp.electrohelps.in/backend/products'), 
+        fetch('https://enplerp.electrohelps.in/backend/inventory'), 
         fetch(DELIVERY_API),
       ]);
       
@@ -117,11 +170,11 @@ export default function MaterialPage() {
       const customersArray = custData.data || custData;
       setCustomers(Array.isArray(customersArray) ? customersArray : []);
       
-      // Vendors - assuming returns array directly
+      // Vendors
       const vendData = await vendRes.json();
       setVendors(Array.isArray(vendData) ? vendData : []);
       
-      // Products - assuming returns array directly
+      // Products
       const prodData = await prodRes.json();
       setProducts(Array.isArray(prodData) ? prodData : []);
       
@@ -144,12 +197,17 @@ export default function MaterialPage() {
       setDeliveryList(Array.isArray(delData) ? delData.reverse() : []);
     } catch (error) {
       console.error('Error fetching data:', error);
+      toast({ title: 'Error loading data', description: 'Please refresh the page', variant: 'error' });
     } finally { 
       setLoading(false); 
     }
   };
 
-  useEffect(() => { if (!loadingPerms && perms.read) fetchAll(); }, [loadingPerms, perms.read]);
+  useEffect(() => { 
+    if (!loadingPerms && perms.read) {
+      fetchAll(); 
+    }
+  }, [loadingPerms, perms.read]);
 
   useEffect(() => {
     // SAFE: Check if customers is array before using find
@@ -176,132 +234,214 @@ export default function MaterialPage() {
   const sorted = useMemo(() => {
     if (!sortField) return filtered;
     return [...filtered].sort((a, b) => {
-      const av = a[sortField] ?? ''; const bv = b[sortField] ?? '';
-      if (typeof av === 'number' && typeof bv === 'number') return sortOrder === 'asc' ? av - bv : bv - av;
-      return sortOrder === 'asc' ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
+      let av = a[sortField] ?? ''; 
+      let bv = b[sortField] ?? '';
+      
+      // Handle nested fields for sorting
+      if (sortField === 'customer') {
+        av = a.addressBook?.customerName ?? '';
+        bv = b.addressBook?.customerName ?? '';
+      } else if (sortField === 'site') {
+        av = a.site?.siteName ?? '';
+        bv = b.site?.siteName ?? '';
+      } else if (sortField === 'vendor') {
+        av = a.vendor?.vendorName ?? '';
+        bv = b.vendor?.vendorName ?? '';
+      }
+      
+      if (typeof av === 'number' && typeof bv === 'number') {
+        return sortOrder === 'asc' ? av - bv : bv - av;
+      }
+      return sortOrder === 'asc' 
+        ? String(av).localeCompare(String(bv)) 
+        : String(bv).localeCompare(String(av));
     });
   }, [filtered, sortField, sortOrder]);
 
   const totalPages = Math.ceil(sorted.length / itemsPerPage);
   const paginated = sorted.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-  const handleSort = (k: string) => { if (sortField === k) setSortOrder(o => o === 'asc' ? 'desc' : 'asc'); else { setSortField(k); setSortOrder('asc'); } setCurrentPage(1); };
+  
+  const handleSort = (k: string) => { 
+    if (sortField === k) {
+      setSortOrder(o => o === 'asc' ? 'desc' : 'asc');
+    } else { 
+      setSortField(k); 
+      setSortOrder('asc'); 
+    }
+    setCurrentPage(1); 
+  };
 
   /* ── CSV ──────────────────────────────────────────────── */
   const handleCSV = () => {
-    if (!deliveryList.length) return;
+    if (!deliveryList.length) {
+      toast({ title: 'No data to export', variant: 'warning' });
+      return;
+    }
+    
     const allSites: Site[] = customers.flatMap(c => c.sites || []);
     const csv = Papa.unparse(deliveryList.map(d => ({
-      DeliveryType: d.deliveryType || 'N/A', 
-      RefNumber: d.refNumber || 'N/A', 
-      SalesOrderNo: d.salesOrderNo || 'N/A',
-      QuotationNo: d.quotationNo || 'N/A', 
-      PurchaseInvoiceNo: d.purchaseInvoiceNo || 'N/A', 
-      DeliveryChallan: d.deliveryChallan || 'N/A',
-      // SAFE: Check if customers is array before using find
-      Customer: Array.isArray(customers) 
+      'Delivery Type': d.deliveryType || 'N/A', 
+      'Reference Number': d.refNumber || 'N/A', 
+      'Sales Order No': d.salesOrderNo || 'N/A',
+      'Quotation No': d.quotationNo || 'N/A', 
+      'Purchase Invoice No': d.purchaseInvoiceNo || 'N/A', 
+      'Delivery Challan': d.deliveryChallan || 'N/A',
+      'Customer': Array.isArray(customers) 
         ? customers.find(c => c.id === d.customerId)?.customerName || 'N/A'
         : 'N/A',
-      // SAFE: Check if allSites is array before using find
-      Site: Array.isArray(allSites) 
+      'Site': Array.isArray(allSites) 
         ? allSites.find(s => s.id === d.siteId)?.siteName || 'N/A'
         : 'N/A',
-      // SAFE: Check if vendors is array before using find
-      Vendor: Array.isArray(vendors) 
+      'Vendor': Array.isArray(vendors) 
         ? vendors.find(v => v.id === d.vendorId)?.vendorName || 'N/A'
         : 'N/A',
-      Products: (d.materialDeliveryItems || []).map((i: any) => { 
+      'Products': (d.materialDeliveryItems || []).map((i: any) => { 
         const inv = inventory.find(iv => iv.id === i.inventoryId); 
-        return `${Array.isArray(products) && products.find(p => p.id === i.productId)?.productName || inv?.product?.productName || 'N/A'} (SN:${inv?.serialNumber || i.serialNumber || 'N/A'}, MAC:${inv?.macAddress || i.macAddress || 'N/A'})`; 
+        const productName = Array.isArray(products) 
+          ? products.find(p => p.id === i.productId)?.productName 
+          : inv?.product?.productName || 'N/A';
+        return `${productName} (SN: ${inv?.serialNumber || i.serialNumber || 'N/A'}, MAC: ${inv?.macAddress || i.macAddress || 'N/A'})`; 
       }).join('; '),
     })));
+    
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `material_deliveries_${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    const a = document.createElement('a'); 
+    a.href = URL.createObjectURL(blob); 
+    a.download = `material_deliveries_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a); 
+    a.click(); 
+    document.body.removeChild(a);
+    
+    toast({ title: 'Export successful', description: `${deliveryList.length} records exported`, variant: 'success' });
   };
 
   /* ── form validation ──────────────────────────────────── */
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
     const iErrs: Record<number, Record<string, string>> = {};
+    
     if (!formData.deliveryType) errs.deliveryType = 'Delivery type is required';
-    if (isSaleOrDemo && !formData.customerId) errs.customerId = 'Customer is required for Sale or Demo';
-    if (isSaleOrDemo && formData.customerId && !formData.siteId) errs.siteId = 'Site is required';
-    if (isPurchaseReturn && !formData.vendorId) errs.vendorId = 'Vendor is required for Purchase Return';
-    if (items.length === 0) errs.items = 'At least one item is required';
+    
+    if (isSaleOrDemo && !formData.customerId) {
+      errs.customerId = 'Customer is required for Sale or Demo';
+    }
+    
+    if (isSaleOrDemo && formData.customerId && !formData.siteId) {
+      errs.siteId = 'Site is required';
+    }
+    
+    if (isPurchaseReturn && !formData.vendorId) {
+      errs.vendorId = 'Vendor is required for Purchase Return';
+    }
+    
+    if (items.length === 0) {
+      errs.items = 'At least one item is required';
+    }
+    
     items.forEach((item, i) => {
       const ie: Record<string, string> = {};
-      if (!item.serialNumber?.trim() && !item.macAddress?.trim()) { ie.serialNumber = 'Serial or MAC required'; ie.macAddress = 'Serial or MAC required'; }
+      if (!item.serialNumber?.trim() && !item.macAddress?.trim()) { 
+        ie.serialNumber = 'Serial or MAC required'; 
+        ie.macAddress = 'Serial or MAC required'; 
+      }
       if (!item.productId) ie.productId = 'Product is required';
       if (Object.keys(ie).length) iErrs[i] = ie;
     });
-    setErrors(errs); setItemErrors(iErrs);
-    return !Object.keys(errs).length && !Object.keys(iErrs).length;
+    
+    setErrors(errs); 
+    setItemErrors(iErrs);
+    return Object.keys(errs).length === 0 && Object.keys(iErrs).length === 0;
   };
 
   /* ── form handlers ────────────────────────────────────── */
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: name === 'customerId' || name === 'vendorId' ? parseInt(value) : name === 'siteId' && value === '' ? undefined : value }));
-    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+    setFormData(prev => ({ 
+      ...prev, 
+      [name]: name === 'customerId' || name === 'vendorId' || name === 'siteId' 
+        ? (value ? parseInt(value) : undefined) 
+        : value 
+    }));
+    
+    if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
+    }
   };
 
- // Update the handleItemChange function to properly handle selections
-const handleItemChange = (idx: number, field: keyof DeliveryItem, value: string) => {
-  const u = [...items]; 
-  
-  if (field === 'serialNumber' || field === 'macAddress') {
-    // When typing in the input
-    u[idx][field] = value;
+  const handleItemChange = (idx: number, field: keyof DeliveryItem, value: string) => {
+    const u = [...items]; 
     
-    // Try to find matching inventory item
-    const found = inventory.find(inv => 
-      inv.serialNumber === value || inv.macAddress === value
-    );
-    
-    if (found) { 
-      u[idx].productId = found.productId; 
-      u[idx].inventoryId = found.id; 
-      u[idx].serialNumber = found.serialNumber; 
-      u[idx].macAddress = found.macAddress; 
-      u[idx].productName = found.product?.productName || 'Unknown'; 
-      u[idx].vendorId = found.vendorId; 
-      u[idx].customerId = formData.customerId || 0; 
-      u[idx].siteId = formData.siteId || 0; 
+    if (field === 'serialNumber' || field === 'macAddress') {
+      u[idx][field] = value;
+      
+      // Try to find matching inventory item
+      const found = inventory.find(inv => 
+        inv.serialNumber === value || inv.macAddress === value
+      );
+      
+      if (found) { 
+        u[idx].productId = found.productId; 
+        u[idx].inventoryId = found.id; 
+        u[idx].serialNumber = found.serialNumber; 
+        u[idx].macAddress = found.macAddress; 
+        u[idx].productName = found.product?.productName || 'Unknown'; 
+        u[idx].vendorId = found.vendorId; 
+      }
+    } else {
+      (u[idx] as any)[field] = value;
     }
-  } else {
-(u[idx] as any)[field] = value;  }
-  
-  setItems(u);
-  
-  // Clear errors for this field if any
-  if (itemErrors[idx]?.[field]) { 
-    setItemErrors(prev => { 
-      const n = { ...prev }; 
-      if (n[idx]) { 
-        n[idx] = { ...n[idx] }; 
-        delete n[idx][field]; 
-        if (!Object.keys(n[idx]).length) delete n[idx]; 
-      } 
-      return n; 
-    }); 
-  }
-};
-
+    
+    setItems(u);
+    
+    // Clear errors for this field if any
+    if (itemErrors[idx]?.[field]) { 
+      setItemErrors(prev => { 
+        const n = { ...prev }; 
+        if (n[idx]) { 
+          n[idx] = { ...n[idx] }; 
+          delete n[idx][field]; 
+          if (!Object.keys(n[idx]).length) delete n[idx]; 
+        } 
+        return n; 
+      }); 
+    }
+  };
 
   const addItem = () => setItems(prev => [...prev, { ...blankItem }]);
-  const removeItem = (idx: number) => { if (items.length <= 1) return; setItems(prev => prev.filter((_, i) => i !== idx)); };
+  
+  const removeItem = (idx: number) => { 
+    if (items.length <= 1) {
+      toast({ title: 'Cannot remove last item', variant: 'warning' });
+      return;
+    } 
+    setItems(prev => prev.filter((_, i) => i !== idx)); 
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate()) return;
+    if (!validate()) {
+      toast({ title: 'Please fix validation errors', variant: 'error' });
+      return;
+    }
+    
     try {
       setSaving(true);
+      
+      // Filter out items without inventoryId
+      const validItems = items.filter(i => i.inventoryId);
+      
+      if (validItems.length === 0) {
+        toast({ title: 'At least one valid item with inventory is required', variant: 'error' });
+        setSaving(false);
+        return;
+      }
+      
       const payload = {
         ...formData,
         customerId: isSaleOrDemo ? formData.customerId : undefined,
         siteId: formData.siteId || undefined,
         vendorId: isPurchaseReturn ? formData.vendorId : undefined,
-        materialDeliveryItems: items.filter(i => i.inventoryId).map(i => ({ 
+        materialDeliveryItems: validItems.map(i => ({ 
           inventoryId: i.inventoryId, 
           serialNumber: i.serialNumber, 
           macAddress: i.macAddress, 
@@ -309,67 +449,94 @@ const handleItemChange = (idx: number, field: keyof DeliveryItem, value: string)
           productName: i.productName || 'Unknown' 
         })),
       };
+      
       const url = formData.id ? `${DELIVERY_API}/${formData.id}` : DELIVERY_API;
       const method = formData.id ? 'PUT' : 'POST';
-      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      
+      const res = await fetch(url, { 
+        method, 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify(payload) 
+      });
+      
       if (!res.ok) { 
         const err = await res.json().catch(() => null); 
-        toast({ title: 'Save failed', description: err?.message || 'Failed to save delivery', variant: 'error' }); 
+        toast({ 
+          title: 'Save failed', 
+          description: err?.message || 'Failed to save delivery', 
+          variant: 'error' 
+        }); 
         return; 
       }
+      
+      toast({ 
+        title: formData.id ? 'Delivery updated' : 'Delivery created', 
+        variant: 'success' 
+      });
+      
       await fetchAll(); 
       resetForm();
-    } catch { 
+    } catch (error) {
+      console.error('Error saving:', error);
       toast({ title: 'Error saving delivery', variant: 'error' }); 
     } finally { 
       setSaving(false); 
     }
   };
 
- const openEdit = (d: any) => {
-  if (!perms.edit) return;
-  
-  const enriched = (d.materialDeliveryItems || []).map((it: any) => {
-    const inv = inventory.find(i => i.id === it.inventoryId);
+  const openEdit = (d: any) => {
+    if (!perms.edit) {
+      toast({ title: 'No edit permission', variant: 'error' });
+      return;
+    }
     
-    // Use the values from the delivery item first, then fall back to inventory
-    return { 
-      inventoryId: it.inventoryId || 0, 
-      serialNumber: it.serialNumber || inv?.serialNumber || '', 
-      macAddress: it.macAddress || inv?.macAddress || '', 
-      productId: it.productId || inv?.productId || 0, 
-      productName: inv?.product?.productName || 'Unknown', 
-      vendorId: d.vendorId || inv?.vendorId || undefined, 
-      customerId: d.customerId || undefined, 
-      siteId: d.siteId || undefined 
-    };
-  });
-  
-  setFormData({ 
-    id: d.id, 
-    deliveryType: d.deliveryType || '', 
-    refNumber: d.refNumber || '', 
-    salesOrderNo: d.salesOrderNo || '', 
-    quotationNo: d.quotationNo || '', 
-    purchaseInvoiceNo: d.purchaseInvoiceNo || '', 
-    customerId: d.customerId || 0, 
-    siteId: d.siteId || 0, 
-    vendorId: d.vendorId || 0 
-  });
-  
-  setItems(enriched.length ? enriched : [{ ...blankItem }]);
-  setErrors({}); 
-  setItemErrors({});
-  setShowPanel(true);
-};
+    const enriched = (d.materialDeliveryItems || []).map((it: any) => {
+      const inv = inventory.find(i => i.id === it.inventoryId);
+      
+      return { 
+        inventoryId: it.inventoryId || 0, 
+        serialNumber: it.serialNumber || inv?.serialNumber || '', 
+        macAddress: it.macAddress || inv?.macAddress || '', 
+        productId: it.productId || inv?.productId || 0, 
+        productName: inv?.product?.productName || 'Unknown', 
+        vendorId: d.vendorId || inv?.vendorId || undefined, 
+        customerId: d.customerId || undefined, 
+        siteId: d.siteId || undefined 
+      };
+    });
+    
+    setFormData({ 
+      id: d.id, 
+      deliveryType: d.deliveryType || '', 
+      refNumber: d.refNumber || '', 
+      salesOrderNo: d.salesOrderNo || '', 
+      quotationNo: d.quotationNo || '', 
+      purchaseInvoiceNo: d.purchaseInvoiceNo || '', 
+      customerId: d.customerId || 0, 
+      siteId: d.siteId || 0, 
+      vendorId: d.vendorId || 0 
+    });
+    
+    setItems(enriched.length ? enriched : [{ ...blankItem }]);
+    setErrors({}); 
+    setItemErrors({});
+    setShowPanel(true);
+  };
 
   const handleDelete = async (id: number) => { 
-    if (!perms.delete || !confirm('Delete this delivery?')) return; 
+    if (!perms.delete) {
+      toast({ title: 'No delete permission', variant: 'error' });
+      return;
+    }
+    
+    if (!confirm('Are you sure you want to delete this delivery?')) return; 
+    
     try { 
       await fetch(`${DELIVERY_API}/${id}`, { method: 'DELETE' }); 
       await fetchAll(); 
       toast({ title: 'Delivery deleted', variant: 'success' }); 
-    } catch { 
+    } catch (error) {
+      console.error('Error deleting:', error);
       toast({ title: 'Error deleting delivery', variant: 'error' }); 
     } 
   };
@@ -380,23 +547,33 @@ const handleItemChange = (idx: number, field: keyof DeliveryItem, value: string)
     setItems([{ ...blankItem }]); 
     setErrors({}); 
     setItemErrors({}); 
+    setSites([]);
   };
   
   const handleAddNew = () => { 
-    if (!perms.create) return; 
+    if (!perms.create) {
+      toast({ title: 'No create permission', variant: 'error' });
+      return;
+    }
     resetForm(); 
     setShowPanel(true); 
   };
 
   /* ── helpers ──────────────────────────────────────────── */
   const typeBadge = (t: string) => {
-    const cls = t === 'Sale' ? 'bg-green-100 text-green-700' : t === 'Demo' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700';
-    return <Badge className={`${cls} hover:${cls}`}>{t}</Badge>;
+    const cls = t === 'Sale' 
+      ? 'bg-green-100 text-green-700 border-green-200' 
+      : t === 'Demo' 
+        ? 'bg-blue-100 text-blue-700 border-blue-200' 
+        : 'bg-amber-100 text-amber-700 border-amber-200';
+    return <Badge className={`${cls} font-medium px-3 py-1`}>{t}</Badge>;
   };
 
   const SortIcon = ({ col }: { col: string }) => {
-    if (sortField !== col) return <ArrowUpDown className="w-3 h-3 ml-1 text-gray-400" />;
-    return sortOrder === 'asc' ? <ArrowUp className="w-3 h-3 ml-1" /> : <ArrowDown className="w-3 h-3 ml-1" />;
+    if (sortField !== col) return <ArrowUpDown className="w-3.5 h-3.5 ml-1 text-gray-400" />;
+    return sortOrder === 'asc' 
+      ? <ArrowUp className="w-3.5 h-3.5 ml-1 text-indigo-600" /> 
+      : <ArrowDown className="w-3.5 h-3.5 ml-1 text-indigo-600" />;
   };
 
   /* ── guards ───────────────────────────────────────────── */
@@ -480,64 +657,90 @@ const handleItemChange = (idx: number, field: keyof DeliveryItem, value: string)
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={tableCols.length} className="text-center py-12">
-                    <Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto" />
-                  </TableCell>
-                </TableRow>
-              ) : paginated.length > 0 ? paginated.map(d => (
-                <TableRow key={d.id} className="hover:bg-gray-50/50 text-sm">
-                  <TableCell>{typeBadge(d.deliveryType)}</TableCell>
-                  <TableCell className="font-medium">{d.deliveryChallan || <span className="text-gray-400">—</span>}</TableCell>
-                  <TableCell>{d.salesOrderNo || <span className="text-gray-400">—</span>}</TableCell>
-                  <TableCell>{d.quotationNo || <span className="text-gray-400">—</span>}</TableCell>
-                  <TableCell>{d.purchaseInvoiceNo || <span className="text-gray-400">—</span>}</TableCell>
-                  <TableCell className="font-mono text-xs">{d.refNumber || <span className="text-gray-400">—</span>}</TableCell>
-                  <TableCell>{d.addressBook?.customerName || <span className="text-gray-400">—</span>}</TableCell>
-                  <TableCell>{d.site?.siteName || <span className="text-gray-400">—</span>}</TableCell>
-                  <TableCell>{d.vendor?.vendorName || <span className="text-gray-400">—</span>}</TableCell>
-                  <TableCell className="max-w-[180px]">
-                    <div className="flex flex-col gap-0.5">
-                      {d.materialDeliveryItems?.map((i: any, idx: number) => (
-                        <div key={idx} className="text-xs">
-                          <span className="font-medium">{i.product?.productName || 'N/A'}</span>
-                          {i.serialNumber && <span className="text-gray-500 ml-1">SN:{i.serialNumber}</span>}
-                        </div>
-                      )) || <span className="text-gray-400 text-xs">No items</span>}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={() => openEdit(d)} 
-                        disabled={!perms.edit} 
-                        className="h-8 w-8"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={() => handleDelete(d.id)} 
-                        disabled={!perms.delete} 
-                        className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
+                    <div className="flex flex-col items-center gap-3">
+                      <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+                      <p className="text-sm text-gray-500">Loading deliveries...</p>
                     </div>
                   </TableCell>
                 </TableRow>
-              )) : (
+              ) : paginated.length > 0 ? (
+                paginated.map((d, index) => (
+                  <TableRow 
+                    key={d.id} 
+                    className={`hover:bg-gray-50/50 transition-colors ${
+                      index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
+                    }`}
+                  >
+                    <TableCell className="py-4">{typeBadge(d.deliveryType)}</TableCell>
+                    <TableCell className="font-medium text-gray-900">
+                      {d.deliveryChallan || <span className="text-gray-400">—</span>}
+                    </TableCell>
+                    <TableCell>{d.salesOrderNo || <span className="text-gray-400">—</span>}</TableCell>
+                    <TableCell>{d.quotationNo || <span className="text-gray-400">—</span>}</TableCell>
+                    <TableCell>{d.purchaseInvoiceNo || <span className="text-gray-400">—</span>}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {d.refNumber || <span className="text-gray-400">—</span>}
+                    </TableCell>
+                    <TableCell>
+                      {d.addressBook?.customerName || <span className="text-gray-400">—</span>}
+                    </TableCell>
+                    <TableCell>
+                      {d.site?.siteName || <span className="text-gray-400">—</span>}
+                    </TableCell>
+                    <TableCell>
+                      {d.vendor?.vendorName || <span className="text-gray-400">—</span>}
+                    </TableCell>
+                    <TableCell className="max-w-[180px]">
+                      <div className="flex flex-col gap-1.5">
+                        {d.materialDeliveryItems?.map((i: any, idx: number) => (
+                          <div key={idx} className="text-xs bg-gray-50 p-2 rounded border border-gray-100">
+                            <div className="font-medium text-gray-900">{i.product?.productName || 'N/A'}</div>
+                            {i.serialNumber && (
+                              <div className="text-gray-500 mt-0.5">SN: {i.serialNumber}</div>
+                            )}
+                          </div>
+                        )) || <span className="text-gray-400 text-xs">No items</span>}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => openEdit(d)} 
+                          disabled={!perms.edit} 
+                          className="h-8 w-8 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50"
+                          title="Edit"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => handleDelete(d.id)} 
+                          disabled={!perms.delete} 
+                          className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
                 <TableRow>
                   <TableCell colSpan={tableCols.length} className="text-center py-12">
-                    <p className="text-sm text-gray-500">
-                      {searchTerm ? 'No deliveries match your search' : 'No deliveries yet'}
-                    </p>
-                    {!searchTerm && perms.create && (
-                      <Button variant="outline" size="sm" onClick={handleAddNew} className="mt-3 gap-2">
-                        <Plus className="w-3.5 h-3.5" /> Add First Delivery
-                      </Button>
-                    )}
+                    <div className="flex flex-col items-center gap-3">
+                      <p className="text-sm text-gray-500">
+                        {searchTerm ? 'No deliveries match your search' : 'No deliveries yet'}
+                      </p>
+                      {!searchTerm && perms.create && (
+                        <Button variant="outline" size="sm" onClick={handleAddNew} className="mt-3 gap-2">
+                          <Plus className="w-3.5 h-3.5" /> Add First Delivery
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               )}
@@ -558,22 +761,9 @@ const handleItemChange = (idx: number, field: keyof DeliveryItem, value: string)
               >
                 <ChevronLeft className="w-4 h-4" />
               </Button>
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => { 
-                const s = Math.max(1, Math.min(currentPage - 2, totalPages - 4)); 
-                const pg = s + i; 
-                if (pg > totalPages) return null; 
-                return (
-                  <Button 
-                    key={pg} 
-                    variant={currentPage === pg ? 'default' : 'outline'} 
-                    size="icon" 
-                    className="h-8 w-8" 
-                    onClick={() => setCurrentPage(pg)}
-                  >
-                    {pg}
-                  </Button>
-                ); 
-              })}
+              <span className="text-sm px-2">
+                {currentPage} / {totalPages}
+              </span>
               <Button 
                 variant="outline" 
                 size="icon" 
@@ -711,7 +901,7 @@ const handleItemChange = (idx: number, field: keyof DeliveryItem, value: string)
                         const inv = inventoryList.find(x => x.id === v); 
                         if (inv) { 
                           const u = [...items]; 
-                          u[i] = { ...u[i], serialNumber: inv.serialNumber, macAddress: inv.macAddress, productId: inv.productId, inventoryId: inv.id }; 
+                          u[i] = { ...u[i], serialNumber: inv.serialNumber, macAddress: inv.macAddress, productId: inv.productId, inventoryId: inv.id, productName: inv.product?.productName || 'Unknown' }; 
                           setItems(u); 
                         } 
                       }} 
@@ -728,7 +918,7 @@ const handleItemChange = (idx: number, field: keyof DeliveryItem, value: string)
                         const inv = inventoryList.find(x => x.id === v); 
                         if (inv) { 
                           const u = [...items]; 
-                          u[i] = { ...u[i], macAddress: inv.macAddress, serialNumber: inv.serialNumber, productId: inv.productId, inventoryId: inv.id }; 
+                          u[i] = { ...u[i], macAddress: inv.macAddress, serialNumber: inv.serialNumber, productId: inv.productId, inventoryId: inv.id, productName: inv.product?.productName || 'Unknown' }; 
                           setItems(u); 
                         } 
                       }} 

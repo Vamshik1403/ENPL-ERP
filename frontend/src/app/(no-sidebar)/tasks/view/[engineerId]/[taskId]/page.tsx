@@ -199,7 +199,7 @@ export default function ViewTaskPage() {
       setLoading(true);
       
       // First, find the engineer by their engineerId
-      const engineersRes = await fetch('http://localhost:8000/engineer');
+      const engineersRes = await fetch('https://enplerp.electrohelps.in/backend/engineer');
       if (!engineersRes.ok) throw new Error('Failed to fetch engineers');
       
       const engineers = await engineersRes.json();
@@ -212,7 +212,7 @@ export default function ViewTaskPage() {
       setCurrentEngineer(engineer);
       
       // Fetch all tasks and find the one with matching taskID
-      const tasksRes = await fetch('http://localhost:8000/task');
+      const tasksRes = await fetch('https://enplerp.electrohelps.in/backend/task');
       
       if (!tasksRes.ok) {
         throw new Error('Failed to fetch tasks');
@@ -236,11 +236,11 @@ export default function ViewTaskPage() {
       
       // Now fetch related data using the actual task ID from the task data
       const [imagesRes, deptRes, addressRes, sitesRes, workscopeRes] = await Promise.all([
-        fetch(`http://localhost:8000/task-images/${taskData.id}`),
-        fetch('http://localhost:8000/department'),
-        fetch('http://localhost:8000/address-book'),
-        fetch('http://localhost:8000/sites'),
-        fetch('http://localhost:8000/workscope-category')
+        fetch(`https://enplerp.electrohelps.in/backend/task-images/${taskData.id}`),
+        fetch('https://enplerp.electrohelps.in/backend/department'),
+        fetch('https://enplerp.electrohelps.in/backend/address-book'),
+        fetch('https://enplerp.electrohelps.in/backend/sites'),
+        fetch('https://enplerp.electrohelps.in/backend/workscope-category')
       ]);
 
       const imagesData = imagesRes.ok ? await imagesRes.json() : [];
@@ -281,7 +281,7 @@ export default function ViewTaskPage() {
     formData.append('uploadedBy', currentEngineer.engineerId);
     formData.append('uploadedByName', `${currentEngineer.firstName} ${currentEngineer.lastName}`);
 
-    const response = await fetch(`http://localhost:8000/task-images/${task.id}/upload`, {
+    const response = await fetch(`https://enplerp.electrohelps.in/backend/task-images/${task.id}/upload`, {
       method: 'POST',
       body: formData,
     });
@@ -306,7 +306,7 @@ export default function ViewTaskPage() {
     if (!confirm('Are you sure you want to delete this image?')) return;
 
     try {
-      const response = await fetch(`http://localhost:8000/task-images/${imageId}`, {
+      const response = await fetch(`https://enplerp.electrohelps.in/backend/task-images/${imageId}`, {
         method: 'DELETE',
       });
 
@@ -324,7 +324,7 @@ export default function ViewTaskPage() {
 
   const handleDownloadImage = async (image: TaskImage) => {
     try {
-      const response = await fetch(`http://localhost:8000/task-images/image/${image.filename}`);
+      const response = await fetch(`https://enplerp.electrohelps.in/backend/task-images/image/${image.filename}`);
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -831,7 +831,7 @@ export default function ViewTaskPage() {
                   ) : (
                     <div className="relative w-full h-full">
                       <img
-                        src={`http://localhost:8000/task-images/image/${image.filename}`}
+                        src={`https://enplerp.electrohelps.in/backend/task-images/image/${image.filename}`}
                         alt={`Task image`}
                         className="w-full h-full object-cover rounded-lg border border-gray-200 cursor-pointer"
                         onClick={() => openFullScreenImage(image)}
@@ -913,7 +913,7 @@ export default function ViewTaskPage() {
               </div>
             ) : (
               <img
-                src={`http://localhost:8000/task-images/image/${selectedImage.filename}`}
+                src={`https://enplerp.electrohelps.in/backend/task-images/image/${selectedImage.filename}`}
                 alt="Full screen"
                 className="max-w-full max-h-screen object-contain"
               />

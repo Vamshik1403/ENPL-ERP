@@ -105,7 +105,7 @@ const InventoryTable: React.FC = () => {
     const fetchInventory = async () => {
         try {
             setLoading(true);
-            const res = await axios.get("http://localhost:8000/inventory");
+            const res = await axios.get("https://enplerp.electrohelps.in/backend/inventory");
             const inventoryWithDuration = res.data.reverse().map((item: Inventory) => {
                 const purchaseDate = new Date(item.purchaseDate);
                 const today = new Date();
@@ -123,19 +123,19 @@ const InventoryTable: React.FC = () => {
     };
 
     const fetchProducts = async () => {
-        try { const res = await axios.get("http://localhost:8000/products"); setProducts(res.data); }
+        try { const res = await axios.get("https://enplerp.electrohelps.in/backend/products"); setProducts(res.data); }
         catch (error) { console.error("Error fetching products:", error); }
     };
 
     const fetchVendors = async () => {
-        try { const res = await axios.get("http://localhost:8000/vendors"); setVendors(res.data); }
+        try { const res = await axios.get("https://enplerp.electrohelps.in/backend/vendors"); setVendors(res.data); }
         catch (error) { console.error("Error fetching vendors:", error); }
     };
 
     const openViewPanel = async (inventoryId: number) => {
         try {
             setLoading(true);
-            const res = await axios.get(`http://localhost:8000/inventory/${inventoryId}`);
+            const res = await axios.get(`https://enplerp.electrohelps.in/backend/inventory/${inventoryId}`);
             setSelectedInventory(res.data);
             setIsViewOpen(true);
         } catch (error) {
@@ -274,7 +274,7 @@ const InventoryTable: React.FC = () => {
             setSaving(true);
             const payload = {
                 ...normalizedFormData,
-                dueAmount: normalizedFormData.dueAmount ? Number(normalizedFormData.dueAmount) : 0,
+dueAmount: normalizedFormData.dueAmount ? String(normalizedFormData.dueAmount) : "0",
                 products: normalizedFormData.products.map((product) => ({
                     productId: product.productId, make: product.make, model: product.model,
                     serialNumber: product.noSerialMac ? null : product.serialNumber?.trim() || null,
@@ -285,10 +285,10 @@ const InventoryTable: React.FC = () => {
             };
 
             if (normalizedFormData.id) {
-                await axios.put(`http://localhost:8000/inventory/${normalizedFormData.id}`, payload);
+                await axios.put(`https://enplerp.electrohelps.in/backend/inventory/${normalizedFormData.id}`, payload);
                 toast({ title: "Inventory updated", description: "The inventory record was updated successfully.", variant: "success" });
             } else {
-                await axios.post("http://localhost:8000/inventory", payload);
+                await axios.post("https://enplerp.electrohelps.in/backend/inventory", payload);
                 toast({ title: "Inventory created", description: "The new inventory record was created successfully.", variant: "success" });
             }
 
@@ -421,7 +421,9 @@ const InventoryTable: React.FC = () => {
                                 <TableHeader>
                                     <TableRow className="bg-gray-50/80 hover:bg-gray-50/80">
                                         {[
-                                            { label: "Product Name", key: "productName" },
+                                            { label: "Product SKU", key: "productName" },
+                                            { label: "Make", key: "make" },
+                                            {label: "model", key: "model"},
                                             { label: "Vendor", key: "vendor" },
                                             { label: "Status", key: "status" },
                                             { label: "Age", key: "duration" },
@@ -472,6 +474,8 @@ const InventoryTable: React.FC = () => {
                                                 return (
                                                     <TableRow key={`${inv.id}-${product.productId}-${index}`}>
                                                         <TableCell className="font-medium text-gray-900">{pd?.productName || "N/A"}</TableCell>
+                                                        <TableCell className="text-sm text-gray-700">{product.make || "N/A"}</TableCell>
+                                                        <TableCell className="text-sm text-gray-700">{product.model || "N/A"}</TableCell>
                                                         <TableCell className="text-sm text-gray-700">{vendorName}</TableCell>
                                                         <TableCell>
                                                             <Badge variant="secondary">{inv.status || "N/A"}</Badge>

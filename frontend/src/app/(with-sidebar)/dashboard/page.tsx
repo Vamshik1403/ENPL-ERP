@@ -274,7 +274,7 @@ export default function Dashboard() {
       const storedUserId = Number(localStorage.getItem('userId'));
       if (!token || !storedUserId || Number.isNaN(storedUserId)) return;
 
-      const usersRes = await fetch('http://localhost:8000/auth/users', {
+      const usersRes = await fetch('https://enplerp.electrohelps.in/backend/auth/users', {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!usersRes.ok) return;
@@ -284,7 +284,7 @@ export default function Dashboard() {
       );
       if (!loggedUser) return;
 
-      const deptRes = await fetch('http://localhost:8000/department', {
+      const deptRes = await fetch('https://enplerp.electrohelps.in/backend/department', {
         headers: { Authorization: `Bearer ${token}` },
       });
       let departmentId: number | null = null;
@@ -358,13 +358,13 @@ export default function Dashboard() {
       setApiErrors([]);
 
       const endpoints = [
-        'http://localhost:8000/sites',
-        'http://localhost:8000/address-book',
-        'http://localhost:8000/service-contract',
-        'http://localhost:8000/contractworkcategory',
-        'http://localhost:8000/department',
-        'http://localhost:8000/producttype',
-        'http://localhost:8000/workscope-category',
+        'https://enplerp.electrohelps.in/backend/sites',
+        'https://enplerp.electrohelps.in/backend/address-book',
+        'https://enplerp.electrohelps.in/backend/service-contract',
+        'https://enplerp.electrohelps.in/backend/contractworkcategory',
+        'https://enplerp.electrohelps.in/backend/department',
+        'https://enplerp.electrohelps.in/backend/producttype',
+        'https://enplerp.electrohelps.in/backend/workscope-category',
       ];
       const results = await Promise.allSettled(
         endpoints.map((u) => safeFetch(u)),
@@ -382,16 +382,16 @@ export default function Dashboard() {
 
       // Fetch creation dates for live trend bars (fire in parallel)
       const [cDates, sDates, scDates] = await Promise.all([
-        safeFetchDates('http://localhost:8000/address-book'),
-        safeFetchDates('http://localhost:8000/sites'),
-        safeFetchDates('http://localhost:8000/service-contract'),
+        safeFetchDates('https://enplerp.electrohelps.in/backend/address-book'),
+        safeFetchDates('https://enplerp.electrohelps.in/backend/sites'),
+        safeFetchDates('https://enplerp.electrohelps.in/backend/service-contract'),
       ]);
       setCustomerDates(cDates);
       setSiteDates(sDates);
       setContractDates(scDates);
 
       try {
-        const taskRes = await fetch('http://localhost:8000/task');
+        const taskRes = await fetch('https://enplerp.electrohelps.in/backend/task');
         if (taskRes.ok) {
           const arr = await taskRes.json();
           const raw = Array.isArray(arr) ? arr : [];
@@ -409,7 +409,7 @@ export default function Dashboard() {
       }
 
       try {
-        const rRes = await fetch('http://localhost:8000/tasks-remarks');
+        const rRes = await fetch('https://enplerp.electrohelps.in/backend/tasks-remarks');
         if (rRes.ok) {
           const arr = await rRes.json();
           setAllRemarks(Array.isArray(arr) ? arr : []);
@@ -431,16 +431,16 @@ export default function Dashboard() {
   const fetchInventoryData = async () => {
     try {
       const eps = [
-        { url: 'http://localhost:8000/vendors/count', key: 'vendors' },
-        { url: 'http://localhost:8000/customers/count', key: 'customers' },
-        { url: 'http://localhost:8000/sites/count', key: 'sites' },
-        { url: 'http://localhost:8000/products/count', key: 'products' },
-        { url: 'http://localhost:8000/inventory/purchaseRate/count', key: 'purchaseRate' },
-        { url: 'http://localhost:8000/inventory/sold/purchaseRate', key: 'soldPurchaseRate' },
-        { url: 'http://localhost:8000/inventory/rest/sold', key: 'restPurchaseRate' },
-        { url: 'http://localhost:8000/inventory/count/purchaseInvoice', key: 'purchaseInvoice' },
-        { url: 'http://localhost:8000/inventory/count/dueAmount', key: 'dueAmount' },
-        { url: 'http://localhost:8000/inventory/count/demo', key: 'demoOut' },
+        { url: 'https://enplerp.electrohelps.in/backend/vendors/count', key: 'vendors' },
+        { url: 'https://enplerp.electrohelps.in/backend/customers/count', key: 'customers' },
+        { url: 'https://enplerp.electrohelps.in/backend/sites/count', key: 'sites' },
+        { url: 'https://enplerp.electrohelps.in/backend/products/count', key: 'products' },
+        { url: 'https://enplerp.electrohelps.in/backend/inventory/purchaseRate/count', key: 'purchaseRate' },
+        { url: 'https://enplerp.electrohelps.in/backend/inventory/sold/purchaseRate', key: 'soldPurchaseRate' },
+        { url: 'https://enplerp.electrohelps.in/backend/inventory/rest/sold', key: 'restPurchaseRate' },
+        { url: 'https://enplerp.electrohelps.in/backend/inventory/count/purchaseInvoice', key: 'purchaseInvoice' },
+        { url: 'https://enplerp.electrohelps.in/backend/inventory/count/dueAmount', key: 'dueAmount' },
+        { url: 'https://enplerp.electrohelps.in/backend/inventory/count/demo', key: 'demoOut' },
       ];
       const results = await Promise.allSettled(
         eps.map((e) => safeFetch(e.url)),

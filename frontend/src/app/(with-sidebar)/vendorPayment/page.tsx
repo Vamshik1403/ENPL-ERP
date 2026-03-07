@@ -62,9 +62,9 @@ const headers: { label: string; key: string; sortable: boolean }[] = [
   { label: 'Actions', key: 'actions', sortable: false },
 ];
 
-const API = 'http://localhost:8000/vendor-payment';
-const VENDOR_API = 'http://localhost:8000/vendors';
-const PERMISSIONS_API = 'http://localhost:8000/user-permissions';
+const API = 'https://enplerp.electrohelps.in/backend/vendor-payment';
+const VENDOR_API = 'https://enplerp.electrohelps.in/backend/vendors';
+const PERMISSIONS_API = 'https://enplerp.electrohelps.in/backend/user-permissions';
 
 export default function VendorPaymentPage() {
   const { toast } = useToast();
@@ -86,25 +86,70 @@ export default function VendorPaymentPage() {
   const itemsPerPage = 10;
 
   /* ── permissions ──────────────────────────────────────── */
-  useEffect(() => { const id = localStorage.getItem('userId'); if (id) setUserId(Number(id)); }, []);
-  useEffect(() => { if (userId) fetchPermissions(userId); }, [userId]);
+  useEffect(() => { 
+    const id = localStorage.getItem('userId'); 
+    if (id) setUserId(Number(id)); 
+  }, []);
+  
+  useEffect(() => { 
+    if (userId) fetchPermissions(userId); 
+  }, [userId]);
 
   const fetchPermissions = async (uid: number) => {
     try {
+      setLoadingPermissions(true);
+      
       const userType = localStorage.getItem('userType');
       if (userType === 'SUPERADMIN') {
         setPerms({ read: true, create: true, edit: true, delete: true });
         setLoadingPermissions(false);
         return;
       }
-      const res = await fetch(`${PERMISSIONS_API}/${uid}`);
-      if (!res.ok) throw new Error();
-      const raw = await res.text();
-      if (!raw) { setLoadingPermissions(false); return; }
-      const data = JSON.parse(raw);
-      const p = data?.permissions?.permissions ?? {};
-      setPerms(p.VENDOR_PAYMENT ?? { read: false, create: false, edit: false, delete: false });
-    } catch { /* */ } finally { setLoadingPermissions(false); }
+      
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token');
+      const res = await fetch(`${PERMISSIONS_API}/${uid}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      
+      if (!res.ok) {
+        console.warn(`Permission API returned ${res.status}`);
+        setPerms({ read: false, create: false, edit: false, delete: false });
+        setLoadingPermissions(false);
+        return;
+      }
+      
+      const data = await res.json();
+      console.log('Permissions API response for user', uid, ':', data);
+      
+      // Navigate the structure: data.permissions.permissions
+      let permissionsObj = null;
+      if (data?.permissions?.permissions) {
+        permissionsObj = data.permissions.permissions;
+        console.log('Extracted permissions object:', permissionsObj);
+      } else {
+        console.warn('Could not find permissions object in the expected structure.');
+        setPerms({ read: false, create: false, edit: false, delete: false });
+        setLoadingPermissions(false);
+        return;
+      }
+      
+      // Use VENDORS_PAYMENTS as the permission key
+      const vendorPaymentPerms = permissionsObj?.VENDORS_PAYMENTS;
+      
+      if (vendorPaymentPerms) {
+        console.log('VENDORS_PAYMENTS permissions found:', vendorPaymentPerms);
+        setPerms(vendorPaymentPerms);
+      } else {
+        console.warn('VENDORS_PAYMENTS permission key not found. Available keys:', Object.keys(permissionsObj));
+        setPerms({ read: false, create: false, edit: false, delete: false });
+      }
+      
+    } catch (error) {
+      console.error('Permission fetch error:', error);
+      setPerms({ read: false, create: false, edit: false, delete: false });
+    } finally { 
+      setLoadingPermissions(false); 
+    }
   };
 
   /* ── data fetching ────────────────────────────────────── */
@@ -114,19 +159,32 @@ export default function VendorPaymentPage() {
       const res = await fetch(API);
       const data = await res.json();
       setPayments(Array.isArray(data) ? data.reverse() : []);
-    } catch { setPayments([]); } finally { setLoading(false); }
+    } catch (error) {
+      console.error('Error fetching payments:', error);
+      setPayments([]);
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const fetchVendors = async () => {
     try {
       const res = await fetch(VENDOR_API);
       const data = await res.json();
-      setVendors(Array.isArray(data) ? data : []);
-    } catch { /* */ }
+      // Handle paginated response if needed
+      const vendorsArray = data.data || data;
+      setVendors(Array.isArray(vendorsArray) ? vendorsArray : []);
+    } catch (error) {
+      console.error('Error fetching vendors:', error);
+      setVendors([]);
+    }
   };
 
   useEffect(() => {
-    if (!loadingPermissions && perms.read) { fetchPayments(); fetchVendors(); }
+    if (!loadingPermissions && perms.read) { 
+      fetchPayments(); 
+      fetchVendors(); 
+    }
   }, [loadingPermissions, perms.read]);
 
   /* ── search / sort / paginate ──────────────────────────── */
@@ -174,26 +232,33 @@ export default function VendorPaymentPage() {
 
   /* ── CSV ──────────────────────────────────────────────── */
   const handleDownloadCSV = () => {
-    if (!payments.length) return;
+    if (!payments.length) {
+      toast({ title: 'No data to export', variant: 'warning' });
+      return;
+    }
+    
     const csv = Papa.unparse(payments.map(p => ({
       Vendor: vendors.find(v => v.id === p.vendorId)?.vendorName ?? 'N/A',
-      PurchaseInvoiceNo: p.purchaseInvoiceNo || 'N/A',
-      InvoiceGrossAmount: p.invoiceGrossAmount || 'N/A',
-      DueAmount: p.dueAmount || 'N/A',
-      PaidAmount: p.paidAmount || 'N/A',
-      BalanceDue: p.balanceDue || 'N/A',
-      PaymentDate: p.paymentDate || 'N/A',
-      ReferenceNo: p.referenceNo || 'N/A',
-      PaymentType: p.paymentType || 'N/A',
+      'Purchase Invoice No': p.purchaseInvoiceNo || 'N/A',
+      'Invoice Gross Amount': p.invoiceGrossAmount || 'N/A',
+      'Due Amount': p.dueAmount || 'N/A',
+      'Paid Amount': p.paidAmount || 'N/A',
+      'Balance Due': p.balanceDue || 'N/A',
+      'Payment Date': p.paymentDate || 'N/A',
+      'Reference No': p.referenceNo || 'N/A',
+      'Payment Type': p.paymentType || 'N/A',
       Remark: p.remark || 'N/A',
     })));
+    
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.setAttribute('download', 'vendor-payments.csv');
+    link.setAttribute('download', `vendor-payments-${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    
+    toast({ title: 'Export successful', description: `${payments.length} records exported`, variant: 'success' });
   };
 
   /* ── form helpers ─────────────────────────────────────── */
@@ -211,7 +276,7 @@ export default function VendorPaymentPage() {
   const handleVendorSelect = async (val: number) => {
     setFormData(prev => ({ ...prev, vendorId: val }));
     try {
-      const res = await fetch(`http://localhost:8000/inventory?vendorId=${val}`);
+      const res = await fetch(`https://enplerp.electrohelps.in/backend/inventory?vendorId=${val}`);
       const data = await res.json();
       if (data?.length) {
         setVendorInvoices(data);
@@ -223,7 +288,8 @@ export default function VendorPaymentPage() {
         setVendorInvoices([]);
         setFormData(prev => ({ ...prev, purchaseInvoiceNo: '', invoiceGrossAmount: '', dueAmount: '' }));
       }
-    } catch {
+    } catch (error) {
+      console.error('Error fetching vendor invoices:', error);
       setVendorInvoices([]);
       setFormData(prev => ({ ...prev, purchaseInvoiceNo: '', invoiceGrossAmount: '', dueAmount: '' }));
     }
@@ -239,47 +305,132 @@ export default function VendorPaymentPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.vendorId || Number(formData.vendorId) <= 0) { toast({ title: 'Please select Vendor', variant: 'warning' }); return; }
-    if (!formData.purchaseInvoiceNo) { toast({ title: 'Please enter Purchase Invoice No', variant: 'warning' }); return; }
-    if (!formData.paymentDate) { toast({ title: 'Please select Payment Date', variant: 'warning' }); return; }
+    
+    if (!formData.vendorId || Number(formData.vendorId) <= 0) { 
+      toast({ title: 'Please select Vendor', variant: 'warning' }); 
+      return; 
+    }
+    if (!formData.purchaseInvoiceNo) { 
+      toast({ title: 'Please enter Purchase Invoice No', variant: 'warning' }); 
+      return; 
+    }
+    if (!formData.paymentDate) { 
+      toast({ title: 'Please select Payment Date', variant: 'warning' }); 
+      return; 
+    }
+    
     const payload = {
-      vendorId: Number(formData.vendorId), purchaseInvoiceNo: formData.purchaseInvoiceNo,
-      invoiceGrossAmount: formData.invoiceGrossAmount, dueAmount: formData.dueAmount,
-      paidAmount: formData.paidAmount, balanceDue: formData.balanceDue || undefined,
-      paymentDate: formData.paymentDate, paymentType: formData.paymentType,
-      referenceNo: formData.referenceNo, remark: formData.remark || undefined,
+      vendorId: Number(formData.vendorId), 
+      purchaseInvoiceNo: formData.purchaseInvoiceNo,
+      invoiceGrossAmount: formData.invoiceGrossAmount, 
+      dueAmount: formData.dueAmount,
+      paidAmount: formData.paidAmount, 
+      balanceDue: formData.balanceDue || undefined,
+      paymentDate: formData.paymentDate, 
+      paymentType: formData.paymentType,
+      referenceNo: formData.referenceNo, 
+      remark: formData.remark || undefined,
     };
+    
     try {
       const url = formData.id ? `${API}/${formData.id}` : API;
       const method = formData.id ? 'PUT' : 'POST';
-      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      if (!res.ok) { const err = await res.json().catch(() => null); toast({ title: 'Request failed', description: err?.message ? JSON.stringify(err.message) : 'Request failed', variant: 'error' }); return; }
+      const res = await fetch(url, { 
+        method, 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify(payload) 
+      });
+      
+      if (!res.ok) { 
+        const err = await res.json().catch(() => null); 
+        toast({ 
+          title: 'Request failed', 
+          description: err?.message ? JSON.stringify(err.message) : 'Request failed', 
+          variant: 'error' 
+        }); 
+        return; 
+      }
+      
+      toast({ 
+        title: formData.id ? 'Payment updated' : 'Payment created', 
+        variant: 'success' 
+      });
+      
       await fetchPayments();
       resetForm();
-    } catch { toast({ title: 'Request failed', variant: 'error' }); }
+    } catch (error) {
+      console.error('Error saving payment:', error);
+      toast({ title: 'Request failed', variant: 'error' }); 
+    }
   };
 
   const handleEdit = (p: VendorPayment) => {
-    if (!perms.edit) return;
+    if (!perms.edit) {
+      toast({ title: 'No edit permission', variant: 'error' });
+      return;
+    }
     setFormData({ ...p });
     setShowPanel(true);
   };
 
   const handleDelete = async (id: number) => {
-    if (!perms.delete) return;
+    if (!perms.delete) {
+      toast({ title: 'No delete permission', variant: 'error' });
+      return;
+    }
+    
     if (!confirm('Are you sure you want to delete this payment?')) return;
-    try { await fetch(`${API}/${id}`, { method: 'DELETE' }); await fetchPayments(); toast({ title: 'Payment deleted', variant: 'success' }); } catch { toast({ title: 'Error deleting payment', variant: 'error' }); }
+    
+    try { 
+      await fetch(`${API}/${id}`, { method: 'DELETE' }); 
+      await fetchPayments(); 
+      toast({ title: 'Payment deleted', variant: 'success' }); 
+    } catch (error) {
+      console.error('Error deleting payment:', error);
+      toast({ title: 'Error deleting payment', variant: 'error' }); 
+    }
   };
 
-  const resetForm = () => { setShowPanel(false); setFormData({ ...blank }); setVendorInvoices([]); };
-  const handleAddNew = () => { if (!perms.create) return; setFormData({ ...blank }); setVendorInvoices([]); setShowPanel(true); };
+  const resetForm = () => { 
+    setShowPanel(false); 
+    setFormData({ ...blank }); 
+    setVendorInvoices([]); 
+  };
+  
+  const handleAddNew = () => { 
+    if (!perms.create) {
+      toast({ title: 'No create permission', variant: 'error' });
+      return;
+    }
+    setFormData({ ...blank }); 
+    setVendorInvoices([]); 
+    setShowPanel(true); 
+  };
 
   /* ── guards ───────────────────────────────────────────── */
   if (loadingPermissions) {
-    return (<div className="flex items-center justify-center min-h-[60vh]"><div className="text-center space-y-3"><Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto" /><p className="text-sm text-gray-500">Loading permissions…</p></div></div>);
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center space-y-3">
+          <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto" />
+          <p className="text-sm text-gray-500">Loading permissions…</p>
+        </div>
+      </div>
+    );
   }
+  
   if (!perms.read) {
-    return (<div className="flex items-center justify-center min-h-[60vh]"><div className="text-center p-8 bg-white rounded-xl border border-gray-200 shadow-sm max-w-md"><div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4"><ShieldX className="w-6 h-6 text-red-500" /></div><h3 className="text-lg font-semibold text-gray-900 mb-1">Access Denied</h3><p className="text-sm text-gray-500">You don&apos;t have permission to view vendor payments.</p></div></div>);
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center p-8 bg-white rounded-xl border border-gray-200 shadow-sm max-w-md">
+          <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
+            <ShieldX className="w-6 h-6 text-red-500" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-1">Access Denied</h3>
+          <p className="text-sm text-gray-500">You don&apos;t have permission to view vendor payments.</p>
+        </div>
+      </div>
+    );
   }
 
   /* ── sort icon helper ─────────────────────────────────── */
@@ -297,8 +448,12 @@ export default function VendorPaymentPage() {
           <p className="text-sm text-gray-500 mt-0.5">Track and manage vendor payment records</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={handleDownloadCSV} className="gap-2" disabled={!payments.length}><Download className="w-4 h-4" /> CSV</Button>
-          <Button onClick={handleAddNew} disabled={!perms.create} className="gap-2"><Plus className="w-4 h-4" /> Add Payment</Button>
+          <Button variant="outline" onClick={handleDownloadCSV} className="gap-2" disabled={!payments.length}>
+            <Download className="w-4 h-4" /> CSV
+          </Button>
+          <Button onClick={handleAddNew} disabled={!perms.create} className="gap-2">
+            <Plus className="w-4 h-4" /> Add Payment
+          </Button>
         </div>
       </div>
 
@@ -307,9 +462,16 @@ export default function VendorPaymentPage() {
       <div className="flex items-center justify-between gap-4">
         <div className="relative w-full max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <Input placeholder="Search payments…" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} className="pl-9" />
+          <Input 
+            placeholder="Search payments…" 
+            value={searchTerm} 
+            onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} 
+            className="pl-9" 
+          />
         </div>
-        <Badge variant="secondary" className="shrink-0">{sorted.length} {sorted.length === 1 ? 'result' : 'results'}</Badge>
+        <Badge variant="secondary" className="shrink-0">
+          {sorted.length} {sorted.length === 1 ? 'result' : 'results'}
+        </Badge>
       </div>
 
       {/* table */}
@@ -319,33 +481,68 @@ export default function VendorPaymentPage() {
             <TableHeader>
               <TableRow className="bg-gray-50/80">
                 {headers.map(h => (
-                  <TableHead key={h.key} className={`whitespace-nowrap text-xs ${h.sortable ? 'cursor-pointer select-none' : ''} ${h.key === 'actions' ? 'text-right' : ''}`} onClick={() => h.sortable && handleSort(h.key)}>
-                    <span className="inline-flex items-center">{h.label}{h.sortable && <SortIcon col={h.key} />}</span>
+                  <TableHead 
+                    key={h.key} 
+                    className={`whitespace-nowrap text-xs ${h.sortable ? 'cursor-pointer select-none' : ''} ${h.key === 'actions' ? 'text-right' : ''}`} 
+                    onClick={() => h.sortable && handleSort(h.key)}
+                  >
+                    <span className="inline-flex items-center">
+                      {h.label}
+                      {h.sortable && <SortIcon col={h.key} />}
+                    </span>
                   </TableHead>
                 ))}
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={headers.length} className="text-center py-12"><Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto" /></TableCell></TableRow>
+                <TableRow>
+                  <TableCell colSpan={headers.length} className="text-center py-12">
+                    <Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto" />
+                  </TableCell>
+                </TableRow>
               ) : paginated.length > 0 ? (
                 paginated.map(p => (
                   <TableRow key={p.id} className="hover:bg-gray-50/50 text-sm">
-                    <TableCell className="whitespace-nowrap">{p.createdAt ? new Date(p.createdAt).toLocaleDateString() : 'N/A'}</TableCell>
-                    <TableCell className="font-medium">{vendors.find(v => v.id === p.vendorId)?.vendorName ?? 'N/A'}</TableCell>
-                    <TableCell className="whitespace-nowrap">{new Date(p.paymentDate).toLocaleDateString('en-GB')}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {p.createdAt ? new Date(p.createdAt).toLocaleDateString() : 'N/A'}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {vendors.find(v => v.id === p.vendorId)?.vendorName ?? 'N/A'}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {p.paymentDate ? new Date(p.paymentDate).toLocaleDateString('en-GB') : 'N/A'}
+                    </TableCell>
                     <TableCell>{p.referenceNo || 'N/A'}</TableCell>
                     <TableCell className="text-right tabular-nums">{p.invoiceGrossAmount}</TableCell>
                     <TableCell className="text-right tabular-nums">{p.dueAmount}</TableCell>
                     <TableCell className="text-right tabular-nums">{p.paidAmount}</TableCell>
                     <TableCell className="text-right tabular-nums">{p.balanceDue || 'N/A'}</TableCell>
-                    <TableCell><Badge variant="outline" className="text-xs font-normal">{p.paymentType}</Badge></TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs font-normal">{p.paymentType}</Badge>
+                    </TableCell>
                     <TableCell className="max-w-[120px] truncate">{p.remark || 'N/A'}</TableCell>
                     <TableCell className="whitespace-nowrap">{p.purchaseInvoiceNo}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => handleEdit(p)} disabled={!perms.edit} className="h-8 w-8"><Pencil className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(p.id!)} disabled={!perms.delete} className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"><Trash2 className="w-3.5 h-3.5" /></Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => handleEdit(p)} 
+                          disabled={!perms.edit} 
+                          className="h-8 w-8"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => handleDelete(p.id!)} 
+                          disabled={!perms.delete} 
+                          className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -353,8 +550,14 @@ export default function VendorPaymentPage() {
               ) : (
                 <TableRow>
                   <TableCell colSpan={headers.length} className="text-center py-12">
-                    <p className="text-sm text-gray-500">{searchTerm ? 'No payments match your search' : 'No payments yet'}</p>
-                    {!searchTerm && perms.create && <Button variant="outline" size="sm" onClick={handleAddNew} className="mt-3 gap-2"><Plus className="w-3.5 h-3.5" /> Add First Payment</Button>}
+                    <p className="text-sm text-gray-500">
+                      {searchTerm ? 'No payments match your search' : 'No payments yet'}
+                    </p>
+                    {!searchTerm && perms.create && (
+                      <Button variant="outline" size="sm" onClick={handleAddNew} className="mt-3 gap-2">
+                        <Plus className="w-3.5 h-3.5" /> Add First Payment
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               )}
@@ -366,34 +569,63 @@ export default function VendorPaymentPage() {
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50/50">
             <p className="text-sm text-gray-500">Page {currentPage} of {totalPages}</p>
             <div className="flex items-center gap-1">
-              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}><ChevronLeft className="w-4 h-4" /></Button>
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                const start = Math.max(1, Math.min(currentPage - 2, totalPages - 4));
-                const page = start + i;
-                if (page > totalPages) return null;
-                return <Button key={page} variant={currentPage === page ? 'default' : 'outline'} size="icon" className="h-8 w-8" onClick={() => setCurrentPage(page)}>{page}</Button>;
-              })}
-              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}><ChevronRight className="w-4 h-4" /></Button>
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className="h-8 w-8" 
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <span className="text-sm px-2">
+                {currentPage} / {totalPages}
+              </span>
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className="h-8 w-8" 
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
+                disabled={currentPage === totalPages}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
             </div>
           </div>
         )}
       </div>
 
       {/* slide form */}
-      <SlideFormPanel title={formData.id ? 'Edit Payment' : 'Add Payment'} description={formData.id ? 'Update the vendor payment record' : 'Record a new vendor payment'} isOpen={showPanel} onClose={resetForm} >
-        <form onSubmit={handleSave} className="p-6 space-y-5">
+      <SlideFormPanel 
+        title={formData.id ? 'Edit Payment' : 'Add Payment'} 
+        description={formData.id ? 'Update the vendor payment record' : 'Record a new vendor payment'} 
+        isOpen={showPanel} 
+        onClose={resetForm} 
+      >
+        <form onSubmit={handleSave} className="p-6 space-y-5 overflow-y-auto max-h-[calc(100vh-120px)]">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Vendor <span className="text-red-500">*</span></Label>
-              <VendorCombobox selectedValue={formData.vendorId} onSelect={handleVendorSelect} placeholder="Select Vendor" />
+              <VendorCombobox 
+                selectedValue={formData.vendorId} 
+                onSelect={handleVendorSelect} 
+                placeholder="Select Vendor" 
+              />
             </div>
 
             {vendorInvoices.length > 0 && (
               <div className="space-y-2">
                 <Label>Select Invoice <span className="text-red-500">*</span></Label>
-                <select name="purchaseInvoiceNo" value={formData.purchaseInvoiceNo} onChange={e => handleInvoiceSelect(e.target.value)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                <select 
+                  name="purchaseInvoiceNo" 
+                  value={formData.purchaseInvoiceNo} 
+                  onChange={e => handleInvoiceSelect(e.target.value)} 
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
                   <option value="">-- Select Invoice --</option>
-                  {vendorInvoices.map((inv: any, i: number) => <option key={i} value={inv.purchaseInvoice}>{inv.purchaseInvoice}</option>)}
+                  {vendorInvoices.map((inv: any, i: number) => (
+                    <option key={i} value={inv.purchaseInvoice}>{inv.purchaseInvoice}</option>
+                  ))}
                 </select>
               </div>
             )}
@@ -415,7 +647,12 @@ export default function VendorPaymentPage() {
 
             <div className="space-y-2">
               <Label>Payment Type</Label>
-              <select name="paymentType" value={formData.paymentType} onChange={handleChange} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+              <select 
+                name="paymentType" 
+                value={formData.paymentType} 
+                onChange={handleChange} 
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
                 <option value="">-- Select Type --</option>
                 {PAYMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
@@ -445,8 +682,12 @@ export default function VendorPaymentPage() {
           <Separator />
 
           <div className="flex items-center gap-3">
-            <Button type="submit" className="flex-1">{formData.id ? 'Update Payment' : 'Save Payment'}</Button>
-            <Button type="button" variant="outline" onClick={resetForm} className="flex-1">Cancel</Button>
+            <Button type="submit" className="flex-1" disabled={loading}>
+              {formData.id ? 'Update Payment' : 'Save Payment'}
+            </Button>
+            <Button type="button" variant="outline" onClick={resetForm} className="flex-1">
+              Cancel
+            </Button>
           </div>
         </form>
       </SlideFormPanel>

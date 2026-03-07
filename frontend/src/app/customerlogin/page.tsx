@@ -20,7 +20,7 @@ export default function CustomerLoginPage() {
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
       const res = await fetch(
-        `http://localhost:8000/customer-contact/by-email?email=${encodeURIComponent(email)}`,
+        `https://enplerp.electrohelps.in/backend/customer-contact/by-email?email=${encodeURIComponent(email)}`,
         {
           signal: controller.signal,
           headers: {

@@ -45,9 +45,9 @@ interface UserPermissionResponse {
   updatedAt: string;
 }
 
-const API_URL = 'http://localhost:8000/engineer';
-const PERMISSIONS_API = 'http://localhost:8000/user-permissions';
-const TELEGRAM_API = 'http://localhost:8000/telegram';
+const API_URL = 'https://enplerp.electrohelps.in/backend/engineer';
+const PERMISSIONS_API = 'https://enplerp.electrohelps.in/backend/user-permissions';
+const TELEGRAM_API = 'https://enplerp.electrohelps.in/backend/telegram';
 
 export default function EngineerPage() {
   const [engineers, setEngineers] = useState<Engineer[]>([]);

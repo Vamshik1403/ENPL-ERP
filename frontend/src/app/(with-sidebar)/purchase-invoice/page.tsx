@@ -52,11 +52,11 @@ const cols: { label: string; key: string; sortable: boolean }[] = [
   { label: 'Actions', key: 'actions', sortable: false },
 ];
 
-const API = 'http://localhost:8000/inventory';
-const VENDOR_API = 'http://localhost:8000/vendors';
-const PRODUCT_API = 'http://localhost:8000/products';
-const VP_API = 'http://localhost:8000/vendor-payment';
-const PERM_API = 'http://localhost:8000/user-permissions';
+const API = 'https://enplerp.electrohelps.in/backend/inventory';
+const VENDOR_API = 'https://enplerp.electrohelps.in/backend/vendors';
+const PRODUCT_API = 'https://enplerp.electrohelps.in/backend/products';
+const VP_API = 'https://enplerp.electrohelps.in/backend/vendor-payment';
+const PERM_API = 'https://enplerp.electrohelps.in/backend/user-permissions';
 
 export default function PurchaseInvoicePage() {
   const { toast } = useToast();

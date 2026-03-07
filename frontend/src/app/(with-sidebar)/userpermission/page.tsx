@@ -27,12 +27,12 @@ type PermissionsJson = Record<string, CrudPerm>;
 
 /* ── API endpoints ─────────────────────────────────────── */
 const API = {
-  LIST: 'http://localhost:8000/auth/users',
-  REGISTER: 'http://localhost:8000/auth/register',
-  UPDATE: 'http://localhost:8000/auth/users',
-  DELETE: 'http://localhost:8000/auth/users',
-  PERMISSION: (uid: number) => `http://localhost:8000/user-permissions/${uid}`,
-  DEPARTMENTS: 'http://localhost:8000/department',
+  LIST: 'https://enplerp.electrohelps.in/backend/auth/users',
+  REGISTER: 'https://enplerp.electrohelps.in/backend/auth/register',
+  UPDATE: 'https://enplerp.electrohelps.in/backend/auth/users',
+  DELETE: 'https://enplerp.electrohelps.in/backend/auth/users',
+  PERMISSION: (uid: number) => `https://enplerp.electrohelps.in/backend/user-permissions/${uid}`,
+  DEPARTMENTS: 'https://enplerp.electrohelps.in/backend/department',
 };
 
 /* ── modules ───────────────────────────────────────────── */

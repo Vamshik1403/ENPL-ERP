@@ -42,7 +42,7 @@ export function CustomerCombobox({
   React.useEffect(() => {
     async function fetchCustomers() {
       try {
-        const res = await fetch("http://localhost:8000/address-book");
+        const res = await fetch("https://enplerp.electrohelps.in/backend/address-book");
 const data = await res.json();
 
 if (Array.isArray(data)) {

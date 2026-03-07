@@ -137,7 +137,7 @@ export default function AddressBookPage() {
       // Try to get token from localStorage
       const token = localStorage.getItem('access_token') || localStorage.getItem('token');
       
-      const response = await fetch(`http://localhost:8000/user-permissions/${userId}`, {
+      const response = await fetch(`https://enplerp.electrohelps.in/backend/user-permissions/${userId}`, {
         headers: token ? {
           'Authorization': `Bearer ${token}`
         } : {}
@@ -233,7 +233,7 @@ export default function AddressBookPage() {
     try {
       setLoading(true);
       // Add pagination parameters to the API call
-      const response = await fetch(`http://localhost:8000/address-book?page=${currentPage}&limit=${itemsPerPage}`);
+      const response = await fetch(`https://enplerp.electrohelps.in/backend/address-book?page=${currentPage}&limit=${itemsPerPage}`);
       if (response.ok) {
         const data = await response.json();
         // Handle paginated response
@@ -262,7 +262,7 @@ export default function AddressBookPage() {
     try {
       // For Excel export, we need to fetch ALL data (without pagination)
       // You might need a separate endpoint for this, or fetch multiple pages
-      const response = await fetch('http://localhost:8000/address-book?limit=1000'); // Fetch more records
+      const response = await fetch('https://enplerp.electrohelps.in/backend/address-book?limit=1000'); // Fetch more records
       if (response.ok) {
         const data = await response.json();
         // Handle paginated response
@@ -309,7 +309,7 @@ export default function AddressBookPage() {
 
   const generateAddressBookId = async (addressType: string) => {
     try {
-      const response = await fetch(`http://localhost:8000/address-book/next-id/${addressType}`);
+      const response = await fetch(`https://enplerp.electrohelps.in/backend/address-book/next-id/${addressType}`);
       const data = await response.json();
       return data.nextId;
     } catch (error) {
@@ -366,7 +366,7 @@ export default function AddressBookPage() {
           gstNo: formData.gstNo,
         };
 
-        const response = await fetch(`http://localhost:8000/address-book/${editingId}`, {
+        const response = await fetch(`https://enplerp.electrohelps.in/backend/address-book/${editingId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updateData),
@@ -374,7 +374,7 @@ export default function AddressBookPage() {
 
         if (response.ok) {
           // STEP 1: Fetch existing contacts from backend to compare
-          const existingContactsResponse = await fetch(`http://localhost:8000/address-book/${editingId}/contacts`);
+          const existingContactsResponse = await fetch(`https://enplerp.electrohelps.in/backend/address-book/${editingId}/contacts`);
           let existingContacts: AddressBookContact[] = [];
           
           if (existingContactsResponse.ok) {
@@ -395,7 +395,7 @@ export default function AddressBookPage() {
           for (const contact of contactsToDelete) {
             if (contact.id) {
               console.log('Deleting contact:', contact.id);
-              await fetch(`http://localhost:8000/address-book/contacts/${contact.id}`, {
+              await fetch(`https://enplerp.electrohelps.in/backend/address-book/contacts/${contact.id}`, {
                 method: 'DELETE',
               });
             }
@@ -406,7 +406,7 @@ export default function AddressBookPage() {
             if (contact.contactPerson.trim() && contact.contactNumber.trim()) {
               if (contact.id) {
                 // Update existing contact
-                await fetch(`http://localhost:8000/address-book/contacts/${contact.id}`, {
+                await fetch(`https://enplerp.electrohelps.in/backend/address-book/contacts/${contact.id}`, {
                   method: 'PUT',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
@@ -418,7 +418,7 @@ export default function AddressBookPage() {
                 });
               } else {
                 // Create new contact
-                await fetch(`http://localhost:8000/address-book/${editingId}/contacts`, {
+                await fetch(`https://enplerp.electrohelps.in/backend/address-book/${editingId}/contacts`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
@@ -443,7 +443,7 @@ export default function AddressBookPage() {
         }
       } else {
         // Create new record (no deletion needed for new records)
-        const response = await fetch('http://localhost:8000/address-book', {
+        const response = await fetch('https://enplerp.electrohelps.in/backend/address-book', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData),
@@ -455,7 +455,7 @@ export default function AddressBookPage() {
           // Create contacts
           for (const contact of formContacts) {
             if (contact.contactPerson.trim() && contact.contactNumber.trim()) {
-              await fetch(`http://localhost:8000/address-book/${newAddressBook.id}/contacts`, {
+              await fetch(`https://enplerp.electrohelps.in/backend/address-book/${newAddressBook.id}/contacts`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -515,7 +515,7 @@ export default function AddressBookPage() {
 
       // Fetch existing contacts
       try {
-        const response = await fetch(`http://localhost:8000/address-book/${id}/contacts`);
+        const response = await fetch(`https://enplerp.electrohelps.in/backend/address-book/${id}/contacts`);
         if (response.ok) {
           const contactsData = await response.json();
           // Handle both paginated and non-paginated responses
@@ -539,7 +539,7 @@ export default function AddressBookPage() {
     
     if (confirm('Are you sure you want to delete this customer?')) {
       try {
-        const response = await fetch(`http://localhost:8000/address-book/${id}`, {
+        const response = await fetch(`https://enplerp.electrohelps.in/backend/address-book/${id}`, {
           method: 'DELETE',
         });
 

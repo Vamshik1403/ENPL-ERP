@@ -42,7 +42,7 @@ export default function SiteCombobox({
   React.useEffect(() => {
     async function fetchSites() {
       try {
-        const res = await fetch("http://localhost:8000/sites");
+        const res = await fetch("https://enplerp.electrohelps.in/backend/sites");
         const data = await res.json();
         setProducts(data);
       } catch (error) {

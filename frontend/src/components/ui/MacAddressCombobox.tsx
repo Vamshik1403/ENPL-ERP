@@ -44,7 +44,7 @@ export default function MacAddressCombobox({
   React.useEffect(() => {
     async function fetchMacAddressNumbers() {
       try {
-        const res = await fetch("http://localhost:8000/inventory");
+        const res = await fetch("https://enplerp.electrohelps.in/backend/inventory");
         const data = await res.json();
 
         console.log("Fetched inventory data:", data); // Debug fetch

@@ -307,7 +307,7 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
       const userId = parseInt(storedUserId);
       
       // Fetch permissions for specific user
-      const res = await fetch(`http://localhost:8000/user-permissions/${userId}`);
+      const res = await fetch(`https://enplerp.electrohelps.in/backend/user-permissions/${userId}`);
       
       if (!res.ok) {
         console.warn(`Failed to fetch permissions for user ${userId}, using default`);

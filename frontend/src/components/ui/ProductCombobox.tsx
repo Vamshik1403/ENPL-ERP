@@ -42,7 +42,7 @@ export function ProductCombobox({
   React.useEffect(() => {
     async function fetchProducts() {
       try {
-        const res = await fetch("http://localhost:8000/products");
+        const res = await fetch("https://enplerp.electrohelps.in/backend/products");
         const data = await res.json();
         setProducts(data);
       } catch (error) {

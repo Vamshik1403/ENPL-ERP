@@ -39,7 +39,7 @@ export class UpdateInventoryDto {
 
     @IsOptional()
   @IsString()
-  dueAmount?: number;
+  dueAmount?: string;
 
   @IsOptional()
   @IsString()

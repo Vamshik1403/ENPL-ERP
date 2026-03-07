@@ -20,7 +20,7 @@ import { useToast } from '@/components/ui/toaster';
 /* ── API helper ────────────────────────────────────────── */
 async function apiFetch(url: string, method = 'GET', body?: any) {
   try {
-    const res = await fetch(`http://localhost:8000${url}`, {
+    const res = await fetch(`https://enplerp.electrohelps.in/backend${url}`, {
       method, headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
     });
@@ -114,7 +114,7 @@ export default function ServiceContractPage() {
         setPermissions({ SERVICE_CONTRACTS: all });
         setLoadingPerms(false); return;
       }
-      const res = await fetch(`http://localhost:8000/user-permissions/${uid}`);
+      const res = await fetch(`https://enplerp.electrohelps.in/backend/user-permissions/${uid}`);
       if (!res.ok) throw new Error();
       const raw = await res.text(); if (!raw) { setLoadingPerms(false); return; }
       const data = JSON.parse(raw);
@@ -278,7 +278,7 @@ const handleCustomerSelect = (cid: number) => {
         const fd = new FormData(); fd.append('customerId', String(formData.customerId)); fd.append('branchId', String(formData.branchId));
         fd.append('salesManagerName', formData.salesManagerName); fd.append('amcType', formData.amcType || '');
         if (attachmentFile) fd.append('attachment', attachmentFile);
-        const r = await fetch(`http://localhost:8000/service-contract/${editingId}`, { method: 'PATCH', body: fd });
+        const r = await fetch(`https://enplerp.electrohelps.in/backend/service-contract/${editingId}`, { method: 'PATCH', body: fd });
         if (!r.ok) throw new Error('Update failed');
         await apiFetch('/service-contract-period', 'POST', { serviceContractId: editingId, startDate: formData.startDate, endDate: formData.endDate, nextPMVisitDate: formData.nextPMVisitDate, contractDescription: formData.contractDescription });
         await apiFetch('/service-contract-terms', 'POST', { serviceContractId: editingId, maxOnSiteVisits: formData.maxOnSiteVisits, maxPreventiveMaintenanceVisit: formData.maxPreventiveMaintenanceVisit, inclusiveInOnSiteVisitCounts: formData.inclusiveInOnSiteVisitCounts, preventiveMaintenanceCycle: formData.preventiveMaintenanceCycle });
@@ -291,7 +291,7 @@ const handleCustomerSelect = (cid: number) => {
         const fd = new FormData(); fd.append('customerId', String(formData.customerId)); fd.append('branchId', String(formData.branchId));
         fd.append('salesManagerName', formData.salesManagerName); fd.append('amcType', formData.amcType || '');
         if (attachmentFile) fd.append('attachment', attachmentFile);
-        const r = await fetch('http://localhost:8000/service-contract', { method: 'POST', body: fd });
+        const r = await fetch('https://enplerp.electrohelps.in/backend/service-contract', { method: 'POST', body: fd });
         if (!r.ok) throw new Error('Create failed');
         const main = await r.json(); scId = main.id;
         await apiFetch('/service-contract-period', 'POST', { serviceContractId: scId, startDate: formData.startDate, endDate: formData.endDate, nextPMVisitDate: formData.nextPMVisitDate, contractDescription: formData.contractDescription });
@@ -422,7 +422,7 @@ const handleCustomerSelect = (cid: number) => {
             <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><Users className="w-4 h-4" /> Basic Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="space-y-2"><Label>Contract ID</Label><Input value={formData.serviceContractID} readOnly className="bg-gray-50" /></div>
-              <div className="space-y-2"><Label>Attachment</Label><input type="file" accept="image/*,.pdf" onChange={e => setAttachmentFile(e.target.files?.[0] || null)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm" />{!attachmentFile && editingId && formData.attachmentUrl && <a href={`http://localhost:8000${formData.attachmentUrl}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline">View current</a>}</div>
+              <div className="space-y-2"><Label>Attachment</Label><input type="file" accept="image/*,.pdf" onChange={e => setAttachmentFile(e.target.files?.[0] || null)} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm" />{!attachmentFile && editingId && formData.attachmentUrl && <a href={`https://enplerp.electrohelps.in/backend${formData.attachmentUrl}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline">View current</a>}</div>
              <div className="space-y-2 relative" onClick={e => e.stopPropagation()}>
   <Label>Customer Name</Label>
   <Input 

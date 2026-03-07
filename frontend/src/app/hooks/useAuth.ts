@@ -34,10 +34,10 @@ export const useAuth = () => {
     try {
       // Try different endpoints that might return department info
       const endpoints = [
-        `http://localhost:8000/auth/users/${userId}`,
-        `http://localhost:8000/user/${userId}`,
-        `http://localhost:8000/users/${userId}`,
-        `http://localhost:8000/auth/user/${userId}`
+        `https://enplerp.electrohelps.in/backend/auth/users/${userId}`,
+        `https://enplerp.electrohelps.in/backend/user/${userId}`,
+        `https://enplerp.electrohelps.in/backend/users/${userId}`,
+        `https://enplerp.electrohelps.in/backend/auth/user/${userId}`
       ];
 
       for (const endpoint of endpoints) {
@@ -58,7 +58,7 @@ export const useAuth = () => {
       }
 
       // If no specific endpoint works, try to find user in users list with department info
-      const usersRes = await fetch("http://localhost:8000/auth/users", {
+      const usersRes = await fetch("https://enplerp.electrohelps.in/backend/auth/users", {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -85,7 +85,7 @@ export const useAuth = () => {
 
     try {
       // 1️⃣ Login
-      const res = await fetch("http://localhost:8000/auth/login", {
+      const res = await fetch("https://enplerp.electrohelps.in/backend/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -105,7 +105,7 @@ export const useAuth = () => {
       localStorage.setItem("access_token", token);
 
       // 2️⃣ Fetch users list to find the user
-      const usersRes = await fetch("http://localhost:8000/auth/users", {
+      const usersRes = await fetch("https://enplerp.electrohelps.in/backend/auth/users", {
         headers: { Authorization: `Bearer ${token}` },
       });
 

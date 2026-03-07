@@ -53,7 +53,7 @@ const SubCategoryTable: React.FC = () => {
 
   const fetchCategories = async () => {
     try {
-      const response = await axios.get("http://localhost:8000/category");
+      const response = await axios.get("https://enplerp.electrohelps.in/backend/category");
       setCategories(response.data);
     } catch (error) {
       console.error("Error fetching categories:", error);
@@ -62,7 +62,7 @@ const SubCategoryTable: React.FC = () => {
 
   const fetchSubCategories = async () => {
     try {
-      const response = await axios.get("http://localhost:8000/subcategory");
+      const response = await axios.get("https://enplerp.electrohelps.in/backend/subcategory");
       const filteredSubCategories = response.data.filter(
         (subCategory: SubCategory) =>
           subCategory.category?.categoryName && subCategory.subCategoryName
@@ -77,7 +77,7 @@ const SubCategoryTable: React.FC = () => {
     if (window.confirm("Are you sure you want to delete this subcategory?")) {
       try {
         await axios.delete(
-          `http://localhost:8000/subcategory/${subCategoryId}`
+          `https://enplerp.electrohelps.in/backend/subcategory/${subCategoryId}`
         );
         toast({ title: "Subcategory deleted successfully!", variant: "success" });
         fetchSubCategories();
@@ -133,7 +133,7 @@ const SubCategoryTable: React.FC = () => {
     try {
       if (selectedSubCategory) {
         await axios.put(
-          `http://localhost:8000/subcategory/${selectedSubCategory.id}`,
+          `https://enplerp.electrohelps.in/backend/subcategory/${selectedSubCategory.id}`,
           {
             categoryId,
             subCategoryName,
@@ -142,7 +142,7 @@ const SubCategoryTable: React.FC = () => {
         );
         toast({ title: "Subcategory updated successfully!", variant: "success" });
       } else {
-        await axios.post("http://localhost:8000/subcategory", {
+        await axios.post("https://enplerp.electrohelps.in/backend/subcategory", {
           categoryId,
           subCategoryName,
           subCategoryId: newSubCategoryId,

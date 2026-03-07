@@ -54,7 +54,7 @@ const CategoryTable: React.FC = () => {
 
   const fetchCategories = async () => {
     try {
-      const response = await axios.get("http://localhost:8000/category");
+      const response = await axios.get("https://enplerp.electrohelps.in/backend/category");
       setCategories(response.data.reverse());
     } catch (error) {
       console.error("Error fetching categories:", error);
@@ -64,7 +64,7 @@ const CategoryTable: React.FC = () => {
   const handleDelete = async (id: number) => {
     if (window.confirm("Are you sure you want to delete this category?")) {
       try {
-        await axios.delete(`http://localhost:8000/category/${id}`);
+        await axios.delete(`https://enplerp.electrohelps.in/backend/category/${id}`);
         toast({ title: "Category deleted successfully!", variant: "success" });
         fetchCategories();
       } catch (error) {
@@ -87,7 +87,7 @@ const CategoryTable: React.FC = () => {
     }
 
     try {
-      await axios.post("http://localhost:8000/category", {
+      await axios.post("https://enplerp.electrohelps.in/backend/category", {
         categoryName: formData.categoryName,
         categoryId: formData.categoryId,
         subCategories: formData.subCategories,
@@ -104,7 +104,7 @@ const CategoryTable: React.FC = () => {
     if (!selectedCategory) return;
 
     try {
-      await axios.put(`http://localhost:8000/category/${selectedCategory.id}`, {
+      await axios.put(`https://enplerp.electrohelps.in/backend/category/${selectedCategory.id}`, {
         categoryName: formData.categoryName,
         categoryId: String(formData.categoryId),
         subCategories: formData.subCategories,
